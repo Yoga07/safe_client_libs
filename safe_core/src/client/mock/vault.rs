@@ -14,17 +14,11 @@ use fs2::FileExt;
 use maidsafe_utilities::serialisation::{deserialise, serialise};
 use routing::{Authority, ClientError, MutableData as OldMutableData};
 use safe_nd::{
-<<<<<<< HEAD
-    verify_signature, Coins, Error, ImmutableData, MDataAddress, Message, MessageId,
-    MutableData as NewMutableData, PublicId, PublicKey, Request, Response, SeqMutableData,
-    Signature, Transaction, UnpubImmutableData, UnseqMutableData, XorName,
-=======
     verify_signature, AData, ADataAddress, ADataIndex, AppendOnlyData, Coins, Error, ImmutableData,
     MDataAddress, Message, MessageId, MutableData as NewMutableData, PubSeqAppendOnlyData,
     PubUnseqAppendOnlyData, PublicId, PublicKey, Request, Response, SeqAppendOnly, SeqMutableData,
     Signature, Transaction, UnpubImmutableData, UnpubSeqAppendOnlyData, UnpubUnseqAppendOnlyData,
     UnseqAppendOnly, UnseqMutableData, XorName, IDataKind
->>>>>>> 1917cb574... feat/idata: add pub idata
 };
 use std::collections::HashMap;
 use std::env;
@@ -166,16 +160,8 @@ impl Vault {
     pub fn authorise_coin_operation(
         &self,
         coin_balance_name: &XorName,
-        req: &Request,
-        msg_id: MessageId,
         requester_pk: PublicKey,
-        signature: Option<Signature>,
     ) -> Result<(), Error> {
-        let sig = match signature {
-            Some(s) => s,
-            None => return Err(Error::InvalidSignature),
-        };
-        verify_signature(&sig, &requester_pk, req, &msg_id)?;
         // Check if we are the owner or app.
         let balance = match self.get_coin_balance(&coin_balance_name) {
             Some(balance) => balance,
@@ -338,6 +324,11 @@ impl Vault {
             PublicId::Client(pk) => *pk.public_key(),
             PublicId::Node(_) => return Err(Error::AccessDenied),
         };
+        let sig = match signature {
+            Some(s) => s,
+            None => return Err(Error::InvalidSignature),
+        };
+        verify_signature(&sig, &requester_pk, &request, &message_id)?;
         let response = match request.clone() {
             //
             // Immutable Data
@@ -352,11 +343,6 @@ impl Vault {
                         IDataKind::Unpub(ref data) => {
                             // Check permissions for unpub idata.
                             if PublicKey::from(*data.owners()) == requester_pk {
-                                let sig = match signature {
-                                    None => return Err(Error::InvalidSignature),
-                                    Some(s) => s,
-                                };
-                                verify_signature(&sig, &requester_pk, &request, &message_id)?;
                                 Ok(kind)
                             } else {
                                 Err(Error::AccessDenied)
@@ -372,10 +358,6 @@ impl Vault {
                     DataId::immutable(*kind.name(), kind.published()),
                     Data::Immutable(kind),
                     requester,
-                    requester_pk,
-                    request,
-                    message_id,
-                    signature,
                 );
                 Response::PutIData(result)
             }
@@ -427,13 +409,7 @@ impl Vault {
                 amount,
                 transaction_id,
             } => {
-                if let Err(e) = self.authorise_coin_operation(
-                    &source,
-                    &request,
-                    message_id,
-                    requester_pk,
-                    signature,
-                ) {
+                if let Err(e) = self.authorise_coin_operation(&source, requester_pk) {
                     Response::TransferCoins(Err(e))
                 } else {
                     let res = self.transfer_coins(source, destination, amount, transaction_id);
@@ -441,13 +417,7 @@ impl Vault {
                 }
             }
             Request::GetBalance(coins_balance_id) => {
-                if let Err(e) = self.authorise_coin_operation(
-                    &coins_balance_id,
-                    &request,
-                    message_id,
-                    requester_pk,
-                    signature,
-                ) {
+                if let Err(e) = self.authorise_coin_operation(&coins_balance_id, requester_pk) {
                     Response::GetBalance(Err(e))
                 } else {
                     let res = self.get_balance(&coins_balance_id);
@@ -466,15 +436,11 @@ impl Vault {
                     DataId::mutable(*data.name(), data.tag()),
                     Data::NewMutable(MutableDataKind::Unsequenced(data.clone())),
                     requester,
-                    requester_pk,
-                    request,
-                    message_id,
-                    signature,
                 );
                 Response::PutUnseqMData(result)
             }
             Request::GetMData(address) => {
-                let result = self.get_mdata(address, requester_pk, request, message_id, signature);
+                let result = self.get_mdata(address, requester_pk, request);
 
                 match (address, result) {
                     (MDataAddress::Seq { .. }, Ok(MutableDataKind::Sequenced(mdata))) => {
@@ -498,21 +464,11 @@ impl Vault {
                     DataId::mutable(*data.name(), data.tag()),
                     Data::NewMutable(MutableDataKind::Sequenced(data.clone())),
                     requester,
-                    requester_pk,
-                    request,
-                    message_id,
-                    signature,
                 );
                 Response::PutSeqMData(result)
             }
             Request::GetMDataValue { address, ref key } => {
-                let result = self.get_mdata(
-                    address,
-                    requester_pk,
-                    request.clone(),
-                    message_id,
-                    signature,
-                );
+                let result = self.get_mdata(address, requester_pk, request.clone());
 
                 match (address, result) {
                     (MDataAddress::Seq { .. }, Ok(MutableDataKind::Sequenced(mdata))) => {
@@ -534,7 +490,7 @@ impl Vault {
                 }
             }
             Request::GetMDataShell(address) => {
-                let result = self.get_mdata(address, requester_pk, request, message_id, signature);
+                let result = self.get_mdata(address, requester_pk, request);
 
                 match (address, result) {
                     (MDataAddress::Seq { .. }, Ok(MutableDataKind::Sequenced(mdata))) => {
@@ -557,7 +513,7 @@ impl Vault {
             }
             Request::GetMDataVersion(address) => {
                 let result = self
-                    .get_mdata(address, requester_pk, request, message_id, signature)
+                    .get_mdata(address, requester_pk, request)
                     .and_then(|data| match data {
                         MutableDataKind::Sequenced(mdata) => Ok(mdata.version()),
                         MutableDataKind::Unsequenced(mdata) => Ok(mdata.version()),
@@ -565,7 +521,7 @@ impl Vault {
                 Response::GetMDataVersion(result)
             }
             Request::ListMDataEntries(address) => {
-                let result = self.get_mdata(address, requester_pk, request, message_id, signature);
+                let result = self.get_mdata(address, requester_pk, request);
 
                 match (address, result) {
                     (MDataAddress::Seq { .. }, Ok(MutableDataKind::Sequenced(mdata))) => {
@@ -590,7 +546,7 @@ impl Vault {
             }
             Request::ListMDataKeys(address) => {
                 let result = self
-                    .get_mdata(address, requester_pk, request, message_id, signature)
+                    .get_mdata(address, requester_pk, request)
                     .and_then(|data| match data {
                         MutableDataKind::Sequenced(mdata) => Ok(mdata.keys().clone()),
                         MutableDataKind::Unsequenced(mdata) => Ok(mdata.keys().clone()),
@@ -598,7 +554,7 @@ impl Vault {
                 Response::ListMDataKeys(result)
             }
             Request::ListMDataValues(address) => {
-                let result = self.get_mdata(address, requester_pk, request, message_id, signature);
+                let result = self.get_mdata(address, requester_pk, request);
                 match (address, result) {
                     (MDataAddress::Seq { .. }, Ok(MutableDataKind::Sequenced(mdata))) => {
                         Response::ListSeqMDataValues(Ok(mdata.values()))
@@ -619,36 +575,42 @@ impl Vault {
                 }
             }
             Request::DeleteMData(address) => {
-                let res = self
-                    .get_mdata(address, requester_pk, request, message_id, signature)
-                    .and_then(|data| match data {
-                        MutableDataKind::Sequenced(mdata) => {
-                            if let PublicId::Client(client_id) = requester.clone() {
-                                if client_id.public_key() == mdata.owners() {
-                                    self.delete_data(DataId::mutable(*mdata.name(), mdata.tag()));
-                                    self.commit_mutation(requester.name());
-                                    Ok(())
+                let res =
+                    self.get_mdata(address, requester_pk, request)
+                        .and_then(|data| match data {
+                            MutableDataKind::Sequenced(mdata) => {
+                                if let PublicId::Client(client_id) = requester.clone() {
+                                    if client_id.public_key() == mdata.owners() {
+                                        self.delete_data(DataId::mutable(
+                                            *mdata.name(),
+                                            mdata.tag(),
+                                        ));
+                                        self.commit_mutation(requester.name());
+                                        Ok(())
+                                    } else {
+                                        Err(Error::InvalidOwners)
+                                    }
                                 } else {
-                                    Err(Error::InvalidOwners)
+                                    Err(Error::AccessDenied)
                                 }
-                            } else {
-                                Err(Error::AccessDenied)
                             }
-                        }
-                        MutableDataKind::Unsequenced(mdata) => {
-                            if let PublicId::Client(client_id) = requester.clone() {
-                                if client_id.public_key() == mdata.owners() {
-                                    self.delete_data(DataId::mutable(*mdata.name(), mdata.tag()));
-                                    self.commit_mutation(requester.name());
-                                    Ok(())
+                            MutableDataKind::Unsequenced(mdata) => {
+                                if let PublicId::Client(client_id) = requester.clone() {
+                                    if client_id.public_key() == mdata.owners() {
+                                        self.delete_data(DataId::mutable(
+                                            *mdata.name(),
+                                            mdata.tag(),
+                                        ));
+                                        self.commit_mutation(requester.name());
+                                        Ok(())
+                                    } else {
+                                        Err(Error::InvalidOwners)
+                                    }
                                 } else {
-                                    Err(Error::InvalidOwners)
+                                    Err(Error::AccessDenied)
                                 }
-                            } else {
-                                Err(Error::AccessDenied)
                             }
-                        }
-                    });
+                        });
                 Response::DeleteMData(res)
             }
             Request::SetMDataUserPermissions {
@@ -661,13 +623,7 @@ impl Vault {
                 let user = user;
 
                 let result = self
-                    .get_mdata(
-                        address,
-                        requester_pk,
-                        request.clone(),
-                        message_id,
-                        signature,
-                    )
+                    .get_mdata(address, requester_pk, request.clone())
                     .and_then(|data| {
                         let data_name = DataId::mutable(data.name(), data.tag());
                         match data.clone() {
@@ -701,7 +657,7 @@ impl Vault {
                 let user = *user;
 
                 let result = self
-                    .get_mdata(address, requester_pk, request, message_id, signature)
+                    .get_mdata(address, requester_pk, request)
                     .and_then(|data| {
                         let data_name = DataId::mutable(data.name(), data.tag());
                         match data.clone() {
@@ -729,7 +685,7 @@ impl Vault {
                 let user = *user;
 
                 let result = self
-                    .get_mdata(address, requester_pk, request, message_id, signature)
+                    .get_mdata(address, requester_pk, request)
                     .and_then(|data| match data {
                         MutableDataKind::Unsequenced(mdata) => {
                             Ok((*unwrap!(mdata.user_permissions(user))).clone())
@@ -742,7 +698,7 @@ impl Vault {
             }
             Request::ListMDataPermissions(address) => {
                 let result = self
-                    .get_mdata(address, requester_pk, request, message_id, signature)
+                    .get_mdata(address, requester_pk, request)
                     .and_then(|data| match data {
                         MutableDataKind::Unsequenced(mdata) => Ok(mdata.permissions()),
                         MutableDataKind::Sequenced(mdata) => Ok(mdata.permissions()),
@@ -754,13 +710,7 @@ impl Vault {
                 ref actions,
             } => {
                 let result = self
-                    .get_mdata(
-                        address,
-                        requester_pk,
-                        request.clone(),
-                        message_id,
-                        signature,
-                    )
+                    .get_mdata(address, requester_pk, request.clone())
                     .and_then(move |data| {
                         let data_name = DataId::mutable(data.name(), data.tag());
                         match data.clone() {
@@ -786,7 +736,7 @@ impl Vault {
                 let actions = actions.clone();
 
                 let result = self
-                    .get_mdata(address, requester_pk, request, message_id, signature)
+                    .get_mdata(address, requester_pk, request)
                     .and_then(move |data| {
                         let data_name = DataId::mutable(data.name(), data.tag());
                         match data.clone() {
@@ -859,15 +809,9 @@ impl Vault {
         address: MDataAddress,
         requester_pk: PublicKey,
         request: Request,
-        msg_id: MessageId,
-        signature: Option<Signature>,
     ) -> Result<MutableDataKind, Error> {
         let data_name = DataId::mutable(*address.name(), address.tag());
-        let sig = match signature {
-            Some(s) => s,
-            None => return Err(Error::InvalidSignature),
-        };
-        verify_signature(&sig, &requester_pk, &request, &msg_id)?;
+
         match self.get_data(&data_name) {
             Some(data_type) => match data_type {
                 Data::NewMutable(data) => match data.clone() {
@@ -901,15 +845,7 @@ impl Vault {
         data_name: DataId,
         data: Data,
         requester: PublicId,
-        requester_pk: PublicKey,
-        request: Request,
-        msg_id: MessageId,
-        signature: Option<Signature>,
     ) -> Result<(), Error> {
-        let sig = match signature {
-            Some(s) => s,
-            None => return Err(Error::InvalidSignature),
-        };
         match requester.clone() {
             PublicId::Client(client_public_id) => {
                 if self.get_account(client_public_id.name()).is_none() {
@@ -926,7 +862,6 @@ impl Vault {
             },
             _ => return Err(Error::AccessDenied),
         }
-        verify_signature(&sig, &requester_pk, &request, &msg_id)?;
         if self.contains_data(&data_name) {
             Err(Error::DataExists)
         } else {
