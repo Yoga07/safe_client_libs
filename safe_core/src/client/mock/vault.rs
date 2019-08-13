@@ -179,6 +179,8 @@ fn request_is_get(request: &Request) -> RequestType {
                 RequestType::GetForUnpub
             }
         }
+        // Placing TestCreateBalance here as we need to avoid verification of signature
+        Request::TestCreateBalance { .. } => RequestType::GetForPub,
 
         Request::GetAData(address)
         | Request::GetADataShell { address, .. }
@@ -617,6 +619,10 @@ impl Vault {
                         self.transfer_coins(source, destination, amount, transaction_id)
                     });
                 Response::Transaction(result)
+            }
+            Request::TestCreateBalance { owner, amount } => {
+                self.mock_create_balance(&owner.into(), amount, owner);
+                Response::Mutation(Ok(()))
             }
             Request::CreateBalance {
                 amount,

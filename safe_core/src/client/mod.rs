@@ -1533,8 +1533,7 @@ pub trait Client: Clone + 'static {
         all(feature = "testing", feature = "mock-network")
     ))]
     fn test_create_balance(&self, owner: PublicKey, amount: Coins) {
-        let inner = self.inner();
-        inner.borrow_mut().routing.create_balance(owner, amount);
+        let _ = send_new(self, Request::TestCreateBalance { owner, amount }, false);
     }
 
     /// Add coins to a coinbalance for testing
