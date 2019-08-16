@@ -12,8 +12,8 @@ use crate::config_handler::{get_config, Config};
 use maidsafe_utilities::serialisation::{deserialise, serialise};
 use maidsafe_utilities::thread;
 use routing::{
-    Authority, BootstrapConfig, ClientError, EntryAction, Event, FullId, InterfaceError,
-    MutableData, PermissionSet, Request, Response, RoutingError, User, TYPE_TAG_SESSION_PACKET,
+    Authority, BootstrapConfig, ClientError, Event, FullId, InterfaceError,
+    Request, Response, RoutingError
 };
 use safe_nd::Coins;
 use safe_nd::{
@@ -23,7 +23,6 @@ use safe_nd::{
 };
 use std;
 use std::cell::Cell;
-use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -44,15 +43,15 @@ const CONNECT_DELAY_MS: u64 = DEFAULT_DELAY_MS;
 const PUT_IDATA_DELAY_MS: u64 = DEFAULT_DELAY_MS;
 const GET_IDATA_DELAY_MS: u64 = DEFAULT_DELAY_MS;
 
-const PUT_MDATA_DELAY_MS: u64 = DEFAULT_DELAY_MS;
-const GET_MDATA_VERSION_DELAY_MS: u64 = DEFAULT_DELAY_MS;
-const GET_MDATA_SHELL_DELAY_MS: u64 = DEFAULT_DELAY_MS;
-const GET_MDATA_DELAY_MS: u64 = DEFAULT_DELAY_MS;
-const GET_MDATA_ENTRIES_DELAY_MS: u64 = DEFAULT_DELAY_MS;
-const SET_MDATA_ENTRIES_DELAY_MS: u64 = DEFAULT_DELAY_MS;
-const GET_MDATA_PERMISSIONS_DELAY_MS: u64 = DEFAULT_DELAY_MS;
-const SET_MDATA_PERMISSIONS_DELAY_MS: u64 = DEFAULT_DELAY_MS;
-const CHANGE_MDATA_OWNER_DELAY_MS: u64 = DEFAULT_DELAY_MS;
+//const PUT_MDATA_DELAY_MS: u64 = DEFAULT_DELAY_MS;
+//const GET_MDATA_VERSION_DELAY_MS: u64 = DEFAULT_DELAY_MS;
+//const GET_MDATA_SHELL_DELAY_MS: u64 = DEFAULT_DELAY_MS;
+//const GET_MDATA_DELAY_MS: u64 = DEFAULT_DELAY_MS;
+//const GET_MDATA_ENTRIES_DELAY_MS: u64 = DEFAULT_DELAY_MS;
+//const SET_MDATA_ENTRIES_DELAY_MS: u64 = DEFAULT_DELAY_MS;
+//const GET_MDATA_PERMISSIONS_DELAY_MS: u64 = DEFAULT_DELAY_MS;
+//const SET_MDATA_PERMISSIONS_DELAY_MS: u64 = DEFAULT_DELAY_MS;
+//const CHANGE_MDATA_OWNER_DELAY_MS: u64 = DEFAULT_DELAY_MS;
 
 lazy_static! {
     static ref VAULT: Arc<Mutex<Vault>> = Arc::new(Mutex::new(Vault::new(get_config())));
@@ -352,441 +351,441 @@ impl Routing {
         Ok(())
     }
 
-    /// Creates a new MutableData in the network.
-    pub fn put_mdata(
-        &mut self,
-        dst: Authority<XorName>,
-        data: MutableData,
-        msg_id: MessageId,
-        requester: PublicKey,
-    ) -> Result<(), InterfaceError> {
-        let data_name = DataId::OldMutable {
-            name: *data.name(),
-            tag: data.tag(),
-        };
-        let client_auth = self.client_auth;
-        let nae_auth = Authority::NaeManager(*data_name.name());
-
-        let skip = self.intercept_request(PUT_MDATA_DELAY_MS, nae_auth, client_auth, || {
-            Request::PutMData {
-                data: data.clone(),
-                msg_id,
-                requester,
-            }
-        });
-        if skip {
-            return Ok(());
-        }
-
-        let res = {
-            let mut vault = self.lock_vault(true);
-
-            if let Err(err) = self.verify_network_limits(msg_id, "put_mdata") {
-                Err(err)
-            } else if data.tag() == TYPE_TAG_SESSION_PACKET {
-                // Put Account.
-                let dst_name = match dst {
-                    Authority::ClientManager(name) => name,
-                    x => panic!("Unexpected authority: {:?}", x),
-                };
-
-                if vault.contains_data(&data_name) {
-                    Err(ClientError::AccountExists)
-                } else {
-                    vault.insert_account(dst_name);
-                    vault.insert_data(data_name, Data::OldMutable(data));
-                    Ok(())
-                }
-            } else {
-                // Put normal data.
-                vault
-                    .authorise_mutation(&dst, &self.client_key())
-                    .and_then(|_| Self::verify_owner(&dst, data.owners()))
-                    .and_then(|_| {
-                        if vault.contains_data(&data_name) {
-                            Err(ClientError::DataExists)
-                        } else {
-                            vault.insert_data(data_name, Data::OldMutable(data));
-                            Ok(())
-                        }
-                    })
-                    .map(|_| vault.commit_mutation(&dst.name()))
-            }
-        };
-
-        self.send_response(
-            PUT_MDATA_DELAY_MS,
-            nae_auth,
-            client_auth,
-            Response::PutMData { res, msg_id },
-        );
-        Ok(())
-    }
-
-    /// Fetches a latest version number.
-    pub fn get_mdata_version(
-        &mut self,
-        dst: Authority<XorName>,
-        name: XorName,
-        tag: u64,
-        msg_id: MessageId,
-    ) -> Result<(), InterfaceError> {
-        self.read_mdata(
-            dst,
-            name,
-            tag,
-            Request::GetMDataVersion { name, tag, msg_id },
-            "get_mdata_version",
-            GET_MDATA_VERSION_DELAY_MS,
-            |data| Ok(data.version()),
-            |res| Response::GetMDataVersion { res, msg_id },
-        )
-    }
-
-    /// Fetches a complete MutableData object.
-    pub fn get_mdata(
-        &mut self,
-        dst: Authority<XorName>,
-        name: XorName,
-        tag: u64,
-        msg_id: MessageId,
-    ) -> Result<(), InterfaceError> {
-        self.read_mdata(
-            dst,
-            name,
-            tag,
-            Request::GetMData { name, tag, msg_id },
-            "get_mdata",
-            GET_MDATA_DELAY_MS,
-            Ok,
-            |res| Response::GetMData { res, msg_id },
-        )
-    }
-
-    /// Fetches a shell of given MutableData.
-    pub fn get_mdata_shell(
-        &mut self,
-        dst: Authority<XorName>,
-        name: XorName,
-        tag: u64,
-        msg_id: MessageId,
-    ) -> Result<(), InterfaceError> {
-        self.read_mdata(
-            dst,
-            name,
-            tag,
-            Request::GetMDataShell { name, tag, msg_id },
-            "get_mdata_shell",
-            GET_MDATA_SHELL_DELAY_MS,
-            |data| Ok(data.shell()),
-            |res| Response::GetMDataShell { res, msg_id },
-        )
-    }
-
-    /// Fetches a list of entries (keys + values).
-    pub fn list_mdata_entries(
-        &mut self,
-        dst: Authority<XorName>,
-        name: XorName,
-        tag: u64,
-        msg_id: MessageId,
-    ) -> Result<(), InterfaceError> {
-        self.read_mdata(
-            dst,
-            name,
-            tag,
-            Request::ListMDataEntries { name, tag, msg_id },
-            "list_mdata_entries",
-            GET_MDATA_ENTRIES_DELAY_MS,
-            |data| Ok(data.entries().clone()),
-            |res| Response::ListMDataEntries { res, msg_id },
-        )
-    }
-
-    /// Fetches a list of keys in MutableData.
-    pub fn list_mdata_keys(
-        &mut self,
-        dst: Authority<XorName>,
-        name: XorName,
-        tag: u64,
-        msg_id: MessageId,
-    ) -> Result<(), InterfaceError> {
-        self.read_mdata(
-            dst,
-            name,
-            tag,
-            Request::ListMDataKeys { name, tag, msg_id },
-            "list_mdata_keys",
-            GET_MDATA_ENTRIES_DELAY_MS,
-            |data| {
-                let keys = data.keys().into_iter().cloned().collect();
-                Ok(keys)
-            },
-            |res| Response::ListMDataKeys { res, msg_id },
-        )
-    }
-
-    /// Fetches a list of values in MutableData.
-    pub fn list_mdata_values(
-        &mut self,
-        dst: Authority<XorName>,
-        name: XorName,
-        tag: u64,
-        msg_id: MessageId,
-    ) -> Result<(), InterfaceError> {
-        self.read_mdata(
-            dst,
-            name,
-            tag,
-            Request::ListMDataValues { name, tag, msg_id },
-            "list_mdata_values",
-            GET_MDATA_ENTRIES_DELAY_MS,
-            |data| {
-                let values = data.values().into_iter().cloned().collect();
-                Ok(values)
-            },
-            |res| Response::ListMDataValues { res, msg_id },
-        )
-    }
-
-    /// Fetches a single value from MutableData
-    pub fn get_mdata_value(
-        &mut self,
-        dst: Authority<XorName>,
-        name: XorName,
-        tag: u64,
-        key: Vec<u8>,
-        msg_id: MessageId,
-    ) -> Result<(), InterfaceError> {
-        self.read_mdata(
-            dst,
-            name,
-            tag,
-            Request::GetMDataValue {
-                name,
-                tag,
-                key: key.clone(),
-                msg_id,
-            },
-            "get_mdata_value",
-            GET_MDATA_ENTRIES_DELAY_MS,
-            |data| data.get(&key).cloned().ok_or(ClientError::NoSuchEntry),
-            |res| Response::GetMDataValue { res, msg_id },
-        )
-    }
-
-    /// Updates MutableData entries in bulk.
-    pub fn mutate_mdata_entries(
-        &mut self,
-        dst: Authority<XorName>,
-        name: XorName,
-        tag: u64,
-        actions: BTreeMap<Vec<u8>, EntryAction>,
-        msg_id: MessageId,
-        requester: PublicKey,
-    ) -> Result<(), InterfaceError> {
-        let actions2 = actions.clone();
-
-        self.mutate_mdata(
-            dst,
-            name,
-            tag,
-            Request::MutateMDataEntries {
-                name,
-                tag,
-                msg_id,
-                actions,
-                requester,
-            },
-            requester,
-            "mutate_mdata_entries",
-            SET_MDATA_ENTRIES_DELAY_MS,
-            |data| data.mutate_entries(actions2, requester),
-            |res| Response::MutateMDataEntries { res, msg_id },
-        )
-    }
-
-    /// Fetches a complete list of permissions.
-    pub fn list_mdata_permissions(
-        &mut self,
-        dst: Authority<XorName>,
-        name: XorName,
-        tag: u64,
-        msg_id: MessageId,
-    ) -> Result<(), InterfaceError> {
-        self.read_mdata(
-            dst,
-            name,
-            tag,
-            Request::ListMDataPermissions { name, tag, msg_id },
-            "list_mdata_permissions",
-            GET_MDATA_PERMISSIONS_DELAY_MS,
-            |data| Ok(data.permissions().clone()),
-            |res| Response::ListMDataPermissions { res, msg_id },
-        )
-    }
-
-    /// Fetches a list of permissions for a particular User.
-    pub fn list_mdata_user_permissions(
-        &mut self,
-        dst: Authority<XorName>,
-        name: XorName,
-        tag: u64,
-        user: User,
-        msg_id: MessageId,
-    ) -> Result<(), InterfaceError> {
-        self.read_mdata(
-            dst,
-            name,
-            tag,
-            Request::ListMDataUserPermissions {
-                name,
-                tag,
-                user,
-                msg_id,
-            },
-            "list_mdata_user_permissions",
-            GET_MDATA_PERMISSIONS_DELAY_MS,
-            |data| data.user_permissions(&user).map(|p| *p),
-            |res| Response::ListMDataUserPermissions { res, msg_id },
-        )
-    }
-
-    /// Updates or inserts a list of permissions for a particular User in the given
-    /// MutableData.
-    #[allow(clippy::too_many_arguments)]
-    pub fn set_mdata_user_permissions(
-        &mut self,
-        dst: Authority<XorName>,
-        name: XorName,
-        tag: u64,
-        user: User,
-        permissions: PermissionSet,
-        version: u64,
-        msg_id: MessageId,
-        requester: PublicKey,
-    ) -> Result<(), InterfaceError> {
-        self.mutate_mdata(
-            dst,
-            name,
-            tag,
-            Request::SetMDataUserPermissions {
-                name,
-                tag,
-                user,
-                permissions,
-                version,
-                msg_id,
-                requester,
-            },
-            requester,
-            "set_mdata_user_permissions",
-            SET_MDATA_PERMISSIONS_DELAY_MS,
-            |data| data.set_user_permissions(user, permissions, version, requester),
-            |res| Response::SetMDataUserPermissions { res, msg_id },
-        )
-    }
-
-    /// Deletes a list of permissions for a particular User in the given MutableData.
-    #[allow(clippy::too_many_arguments)]
-    pub fn del_mdata_user_permissions(
-        &mut self,
-        dst: Authority<XorName>,
-        name: XorName,
-        tag: u64,
-        user: User,
-        version: u64,
-        msg_id: MessageId,
-        requester: PublicKey,
-    ) -> Result<(), InterfaceError> {
-        self.mutate_mdata(
-            dst,
-            name,
-            tag,
-            Request::DelMDataUserPermissions {
-                name,
-                tag,
-                user,
-                version,
-                msg_id,
-                requester,
-            },
-            requester,
-            "del_mdata_user_permissions",
-            SET_MDATA_PERMISSIONS_DELAY_MS,
-            |data| data.del_user_permissions(&user, version, requester),
-            |res| Response::DelMDataUserPermissions { res, msg_id },
-        )
-    }
-
-    /// Changes an owner of the given MutableData. Only the current owner can perform this action.
-    pub fn change_mdata_owner(
-        &mut self,
-        dst: Authority<XorName>,
-        name: XorName,
-        tag: u64,
-        new_owners: BTreeSet<PublicKey>,
-        version: u64,
-        msg_id: MessageId,
-    ) -> Result<(), InterfaceError> {
-        let new_owners_len = new_owners.len();
-        let new_owner = match new_owners.into_iter().next() {
-            Some(ref owner) if new_owners_len == 1 => *owner,
-            Some(_) | None => {
-                // `new_owners` must have exactly 1 element.
-                let client_auth = self.client_auth;
-                self.send_response(
-                    CHANGE_MDATA_OWNER_DELAY_MS,
-                    dst,
-                    client_auth,
-                    Response::ChangeMDataOwner {
-                        res: Err(ClientError::InvalidOwners),
-                        msg_id,
-                    },
-                );
-                return Ok(());
-            }
-        };
-
-        let requester = self.client_key();
-        let requester_name = XorName::from(requester);
-
-        self.mutate_mdata(
-            dst,
-            name,
-            tag,
-            Request::ChangeMDataOwner {
-                name,
-                tag,
-                new_owners: btree_set![new_owner],
-                version,
-                msg_id,
-            },
-            requester,
-            "change_mdata_owner",
-            CHANGE_MDATA_OWNER_DELAY_MS,
-            |data| {
-                let dst_name = match dst {
-                    Authority::ClientManager(name) => name,
-                    _ => return Err(ClientError::InvalidOwners),
-                };
-
-                // Only the current owner can change ownership for MD
-                match Self::verify_owner(&dst, data.owners()) {
-                    Err(ClientError::InvalidOwners) => return Err(ClientError::AccessDenied),
-                    Err(e) => return Err(e),
-                    Ok(_) => (),
-                }
-
-                if requester_name != dst_name {
-                    Err(ClientError::AccessDenied)
-                } else {
-                    data.change_owner(new_owner, version)
-                }
-            },
-            |res| Response::ChangeMDataOwner { res, msg_id },
-        )
-    }
+//    /// Creates a new MutableData in the network.
+//    pub fn put_mdata(
+//        &mut self,
+//        dst: Authority<XorName>,
+//        data: MutableData,
+//        msg_id: MessageId,
+//        requester: PublicKey,
+//    ) -> Result<(), InterfaceError> {
+//        let data_name = DataId::OldMutable {
+//            name: *data.name(),
+//            tag: data.tag(),
+//        };
+//        let client_auth = self.client_auth;
+//        let nae_auth = Authority::NaeManager(*data_name.name());
+//
+//        let skip = self.intercept_request(PUT_MDATA_DELAY_MS, nae_auth, client_auth, || {
+//            Request::PutMData {
+//                data: data.clone(),
+//                msg_id,
+//                requester,
+//            }
+//        });
+//        if skip {
+//            return Ok(());
+//        }
+//
+//        let res = {
+//            let mut vault = self.lock_vault(true);
+//
+//            if let Err(err) = self.verify_network_limits(msg_id, "put_mdata") {
+//                Err(err)
+//            } else if data.tag() == TYPE_TAG_SESSION_PACKET {
+//                // Put Account.
+//                let dst_name = match dst {
+//                    Authority::ClientManager(name) => name,
+//                    x => panic!("Unexpected authority: {:?}", x),
+//                };
+//
+//                if vault.contains_data(&data_name) {
+//                    Err(ClientError::AccountExists)
+//                } else {
+//                    vault.insert_account(dst_name);
+//                    vault.insert_data(data_name, Data::OldMutable(data));
+//                    Ok(())
+//                }
+//            } else {
+//                // Put normal data.
+//                vault
+//                    .authorise_mutation(&dst, &self.client_key())
+//                    .and_then(|_| Self::verify_owner(&dst, data.owners()))
+//                    .and_then(|_| {
+//                        if vault.contains_data(&data_name) {
+//                            Err(ClientError::DataExists)
+//                        } else {
+//                            vault.insert_data(data_name, Data::OldMutable(data));
+//                            Ok(())
+//                        }
+//                    })
+//                    .map(|_| vault.commit_mutation(&dst.name()))
+//            }
+//        };
+//
+//        self.send_response(
+//            PUT_MDATA_DELAY_MS,
+//            nae_auth,
+//            client_auth,
+//            Response::PutMData { res, msg_id },
+//        );
+//        Ok(())
+//    }
+//
+//    /// Fetches a latest version number.
+//    pub fn get_mdata_version(
+//        &mut self,
+//        dst: Authority<XorName>,
+//        name: XorName,
+//        tag: u64,
+//        msg_id: MessageId,
+//    ) -> Result<(), InterfaceError> {
+//        self.read_mdata(
+//            dst,
+//            name,
+//            tag,
+//            Request::GetMDataVersion { name, tag, msg_id },
+//            "get_mdata_version",
+//            GET_MDATA_VERSION_DELAY_MS,
+//            |data| Ok(data.version()),
+//            |res| Response::GetMDataVersion { res, msg_id },
+//        )
+//    }
+//
+//    /// Fetches a complete MutableData object.
+//    pub fn get_mdata(
+//        &mut self,
+//        dst: Authority<XorName>,
+//        name: XorName,
+//        tag: u64,
+//        msg_id: MessageId,
+//    ) -> Result<(), InterfaceError> {
+//        self.read_mdata(
+//            dst,
+//            name,
+//            tag,
+//            Request::GetMData { name, tag, msg_id },
+//            "get_mdata",
+//            GET_MDATA_DELAY_MS,
+//            Ok,
+//            |res| Response::GetMData { res, msg_id },
+//        )
+//    }
+//
+//    /// Fetches a shell of given MutableData.
+//    pub fn get_mdata_shell(
+//        &mut self,
+//        dst: Authority<XorName>,
+//        name: XorName,
+//        tag: u64,
+//        msg_id: MessageId,
+//    ) -> Result<(), InterfaceError> {
+//        self.read_mdata(
+//            dst,
+//            name,
+//            tag,
+//            Request::GetMDataShell { name, tag, msg_id },
+//            "get_mdata_shell",
+//            GET_MDATA_SHELL_DELAY_MS,
+//            |data| Ok(data.shell()),
+//            |res| Response::GetMDataShell { res, msg_id },
+//        )
+//    }
+//
+//    /// Fetches a list of entries (keys + values).
+//    pub fn list_mdata_entries(
+//        &mut self,
+//        dst: Authority<XorName>,
+//        name: XorName,
+//        tag: u64,
+//        msg_id: MessageId,
+//    ) -> Result<(), InterfaceError> {
+//        self.read_mdata(
+//            dst,
+//            name,
+//            tag,
+//            Request::ListMDataEntries { name, tag, msg_id },
+//            "list_mdata_entries",
+//            GET_MDATA_ENTRIES_DELAY_MS,
+//            |data| Ok(data.entries().clone()),
+//            |res| Response::ListMDataEntries { res, msg_id },
+//        )
+//    }
+//
+//    /// Fetches a list of keys in MutableData.
+//    pub fn list_mdata_keys(
+//        &mut self,
+//        dst: Authority<XorName>,
+//        name: XorName,
+//        tag: u64,
+//        msg_id: MessageId,
+//    ) -> Result<(), InterfaceError> {
+//        self.read_mdata(
+//            dst,
+//            name,
+//            tag,
+//            Request::ListMDataKeys { name, tag, msg_id },
+//            "list_mdata_keys",
+//            GET_MDATA_ENTRIES_DELAY_MS,
+//            |data| {
+//                let keys = data.keys().into_iter().cloned().collect();
+//                Ok(keys)
+//            },
+//            |res| Response::ListMDataKeys { res, msg_id },
+//        )
+//    }
+//
+//    /// Fetches a list of values in MutableData.
+//    pub fn list_mdata_values(
+//        &mut self,
+//        dst: Authority<XorName>,
+//        name: XorName,
+//        tag: u64,
+//        msg_id: MessageId,
+//    ) -> Result<(), InterfaceError> {
+//        self.read_mdata(
+//            dst,
+//            name,
+//            tag,
+//            Request::ListMDataValues { name, tag, msg_id },
+//            "list_mdata_values",
+//            GET_MDATA_ENTRIES_DELAY_MS,
+//            |data| {
+//                let values = data.values().into_iter().cloned().collect();
+//                Ok(values)
+//            },
+//            |res| Response::ListMDataValues { res, msg_id },
+//        )
+//    }
+//
+//    /// Fetches a single value from MutableData
+//    pub fn get_mdata_value(
+//        &mut self,
+//        dst: Authority<XorName>,
+//        name: XorName,
+//        tag: u64,
+//        key: Vec<u8>,
+//        msg_id: MessageId,
+//    ) -> Result<(), InterfaceError> {
+//        self.read_mdata(
+//            dst,
+//            name,
+//            tag,
+//            Request::GetMDataValue {
+//                name,
+//                tag,
+//                key: key.clone(),
+//                msg_id,
+//            },
+//            "get_mdata_value",
+//            GET_MDATA_ENTRIES_DELAY_MS,
+//            |data| data.get(&key).cloned().ok_or(ClientError::NoSuchEntry),
+//            |res| Response::GetMDataValue { res, msg_id },
+//        )
+//    }
+//
+//    /// Updates MutableData entries in bulk.
+//    pub fn mutate_mdata_entries(
+//        &mut self,
+//        dst: Authority<XorName>,
+//        name: XorName,
+//        tag: u64,
+//        actions: BTreeMap<Vec<u8>, EntryAction>,
+//        msg_id: MessageId,
+//        requester: PublicKey,
+//    ) -> Result<(), InterfaceError> {
+//        let actions2 = actions.clone();
+//
+//        self.mutate_mdata(
+//            dst,
+//            name,
+//            tag,
+//            Request::MutateMDataEntries {
+//                name,
+//                tag,
+//                msg_id,
+//                actions,
+//                requester,
+//            },
+//            requester,
+//            "mutate_mdata_entries",
+//            SET_MDATA_ENTRIES_DELAY_MS,
+//            |data| data.mutate_entries(actions2, requester),
+//            |res| Response::MutateMDataEntries { res, msg_id },
+//        )
+//    }
+//
+//    /// Fetches a complete list of permissions.
+//    pub fn list_mdata_permissions(
+//        &mut self,
+//        dst: Authority<XorName>,
+//        name: XorName,
+//        tag: u64,
+//        msg_id: MessageId,
+//    ) -> Result<(), InterfaceError> {
+//        self.read_mdata(
+//            dst,
+//            name,
+//            tag,
+//            Request::ListMDataPermissions { name, tag, msg_id },
+//            "list_mdata_permissions",
+//            GET_MDATA_PERMISSIONS_DELAY_MS,
+//            |data| Ok(data.permissions().clone()),
+//            |res| Response::ListMDataPermissions { res, msg_id },
+//        )
+//    }
+//
+//    /// Fetches a list of permissions for a particular User.
+//    pub fn list_mdata_user_permissions(
+//        &mut self,
+//        dst: Authority<XorName>,
+//        name: XorName,
+//        tag: u64,
+//        user: User,
+//        msg_id: MessageId,
+//    ) -> Result<(), InterfaceError> {
+//        self.read_mdata(
+//            dst,
+//            name,
+//            tag,
+//            Request::ListMDataUserPermissions {
+//                name,
+//                tag,
+//                user,
+//                msg_id,
+//            },
+//            "list_mdata_user_permissions",
+//            GET_MDATA_PERMISSIONS_DELAY_MS,
+//            |data| data.user_permissions(&user).map(|p| *p),
+//            |res| Response::ListMDataUserPermissions { res, msg_id },
+//        )
+//    }
+//
+//    /// Updates or inserts a list of permissions for a particular User in the given
+//    /// MutableData.
+//    #[allow(clippy::too_many_arguments)]
+//    pub fn set_mdata_user_permissions(
+//        &mut self,
+//        dst: Authority<XorName>,
+//        name: XorName,
+//        tag: u64,
+//        user: User,
+//        permissions: PermissionSet,
+//        version: u64,
+//        msg_id: MessageId,
+//        requester: PublicKey,
+//    ) -> Result<(), InterfaceError> {
+//        self.mutate_mdata(
+//            dst,
+//            name,
+//            tag,
+//            Request::SetMDataUserPermissions {
+//                name,
+//                tag,
+//                user,
+//                permissions,
+//                version,
+//                msg_id,
+//                requester,
+//            },
+//            requester,
+//            "set_mdata_user_permissions",
+//            SET_MDATA_PERMISSIONS_DELAY_MS,
+//            |data| data.set_user_permissions(user, permissions, version, requester),
+//            |res| Response::SetMDataUserPermissions { res, msg_id },
+//        )
+//    }
+//
+//    /// Deletes a list of permissions for a particular User in the given MutableData.
+//    #[allow(clippy::too_many_arguments)]
+//    pub fn del_mdata_user_permissions(
+//        &mut self,
+//        dst: Authority<XorName>,
+//        name: XorName,
+//        tag: u64,
+//        user: User,
+//        version: u64,
+//        msg_id: MessageId,
+//        requester: PublicKey,
+//    ) -> Result<(), InterfaceError> {
+//        self.mutate_mdata(
+//            dst,
+//            name,
+//            tag,
+//            Request::DelMDataUserPermissions {
+//                name,
+//                tag,
+//                user,
+//                version,
+//                msg_id,
+//                requester,
+//            },
+//            requester,
+//            "del_mdata_user_permissions",
+//            SET_MDATA_PERMISSIONS_DELAY_MS,
+//            |data| data.del_user_permissions(&user, version, requester),
+//            |res| Response::DelMDataUserPermissions { res, msg_id },
+//        )
+//    }
+//
+//    /// Changes an owner of the given MutableData. Only the current owner can perform this action.
+//    pub fn change_mdata_owner(
+//        &mut self,
+//        dst: Authority<XorName>,
+//        name: XorName,
+//        tag: u64,
+//        new_owners: BTreeSet<PublicKey>,
+//        version: u64,
+//        msg_id: MessageId,
+//    ) -> Result<(), InterfaceError> {
+//        let new_owners_len = new_owners.len();
+//        let new_owner = match new_owners.into_iter().next() {
+//            Some(ref owner) if new_owners_len == 1 => *owner,
+//            Some(_) | None => {
+//                // `new_owners` must have exactly 1 element.
+//                let client_auth = self.client_auth;
+//                self.send_response(
+//                    CHANGE_MDATA_OWNER_DELAY_MS,
+//                    dst,
+//                    client_auth,
+//                    Response::ChangeMDataOwner {
+//                        res: Err(ClientError::InvalidOwners),
+//                        msg_id,
+//                    },
+//                );
+//                return Ok(());
+//            }
+//        };
+//
+//        let requester = self.client_key();
+//        let requester_name = XorName::from(requester);
+//
+//        self.mutate_mdata(
+//            dst,
+//            name,
+//            tag,
+//            Request::ChangeMDataOwner {
+//                name,
+//                tag,
+//                new_owners: btree_set![new_owner],
+//                version,
+//                msg_id,
+//            },
+//            requester,
+//            "change_mdata_owner",
+//            CHANGE_MDATA_OWNER_DELAY_MS,
+//            |data| {
+//                let dst_name = match dst {
+//                    Authority::ClientManager(name) => name,
+//                    _ => return Err(ClientError::InvalidOwners),
+//                };
+//
+//                // Only the current owner can change ownership for MD
+//                match Self::verify_owner(&dst, data.owners()) {
+//                    Err(ClientError::InvalidOwners) => return Err(ClientError::AccessDenied),
+//                    Err(e) => return Err(e),
+//                    Ok(_) => (),
+//                }
+//
+//                if requester_name != dst_name {
+//                    Err(ClientError::AccessDenied)
+//                } else {
+//                    data.change_owner(new_owner, version)
+//                }
+//            },
+//            |res| Response::ChangeMDataOwner { res, msg_id },
+//        )
+//    }
 
     fn send_response(
         &mut self,
@@ -826,157 +825,157 @@ impl Routing {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn read_mdata<F, G, R>(
-        &mut self,
-        dst: Authority<XorName>,
-        name: XorName,
-        tag: u64,
-        request: Request,
-        log_label: &str,
-        delay_ms: u64,
-        f: F,
-        g: G,
-    ) -> Result<(), InterfaceError>
-    where
-        F: FnOnce(MutableData) -> Result<R, ClientError>,
-        G: FnOnce(Result<R, ClientError>) -> Response,
-    {
-        self.with_mdata(
-            name,
-            tag,
-            request,
-            None,
-            log_label,
-            delay_ms,
-            false,
-            |data, vault| {
-                vault.authorise_read(&dst, &name)?;
-                f(data)
-            },
-            g,
-        )
-    }
+//    fn read_mdata<F, G, R>(
+//        &mut self,
+//        dst: Authority<XorName>,
+//        name: XorName,
+//        tag: u64,
+//        request: Request,
+//        log_label: &str,
+//        delay_ms: u64,
+//        f: F,
+//        g: G,
+//    ) -> Result<(), InterfaceError>
+//    where
+//        F: FnOnce(MutableData) -> Result<R, ClientError>,
+//        G: FnOnce(Result<R, ClientError>) -> Response,
+//    {
+//        self.with_mdata(
+//            name,
+//            tag,
+//            request,
+//            None,
+//            log_label,
+//            delay_ms,
+//            false,
+//            |data, vault| {
+//                vault.authorise_read(&dst, &name)?;
+//                f(data)
+//            },
+//            g,
+//        )
+//    }
+//
+//    #[allow(clippy::too_many_arguments)]
+//    fn mutate_mdata<F, G, R>(
+//        &mut self,
+//        dst: Authority<XorName>,
+//        name: XorName,
+//        tag: u64,
+//        request: Request,
+//        requester: PublicKey,
+//        log_label: &str,
+//        delay_ms: u64,
+//        f: F,
+//        g: G,
+//    ) -> Result<(), InterfaceError>
+//    where
+//        F: FnOnce(&mut MutableData) -> Result<R, ClientError>,
+//        G: FnOnce(Result<R, ClientError>) -> Response,
+//    {
+//        let client_key = self.client_key();
+//        let mutate = |mut data: MutableData, vault: &mut Vault| {
+//            vault.authorise_mutation(&dst, &client_key)?;
+//
+//            let output = f(&mut data)?;
+//            vault.insert_data(DataId::OldMutable { name, tag }, Data::OldMutable(data));
+//            vault.commit_mutation(&dst.name());
+//
+//            Ok(output)
+//        };
+//
+//        self.with_mdata(
+//            name,
+//            tag,
+//            request,
+//            Some(requester),
+//            log_label,
+//            delay_ms,
+//            true,
+//            mutate,
+//            g,
+//        )
+//    }
+//
+//    #[allow(clippy::too_many_arguments)]
+//    fn with_mdata<F, G, R>(
+//        &mut self,
+//        name: XorName,
+//        tag: u64,
+//        request: Request,
+//        requester: Option<PublicKey>,
+//        log_label: &str,
+//        delay_ms: u64,
+//        write: bool,
+//        f: F,
+//        g: G,
+//    ) -> Result<(), InterfaceError>
+//    where
+//        F: FnOnce(MutableData, &mut Vault) -> Result<R, ClientError>,
+//        G: FnOnce(Result<R, ClientError>) -> Response,
+//    {
+//        let client_auth = self.client_auth;
+//        let nae_auth = Authority::NaeManager(name);
+//        let msg_id = *request.message_id();
+//
+//        if self.intercept_request(delay_ms, nae_auth, client_auth, move || request) {
+//            return Ok(());
+//        }
+//
+//        let res = if let Err(err) = self.verify_network_limits(msg_id, log_label) {
+//            Err(err)
+//        } else if let Err(err) = self.verify_requester(requester) {
+//            Err(err)
+//        } else {
+//            let mut vault = self.lock_vault(write);
+//            match vault.get_data(&DataId::OldMutable { name, tag }) {
+//                Some(Data::OldMutable(data)) => f(data, &mut *vault),
+//                _ => {
+//                    if tag == TYPE_TAG_SESSION_PACKET {
+//                        Err(ClientError::NoSuchAccount)
+//                    } else {
+//                        Err(ClientError::NoSuchData)
+//                    }
+//                }
+//            }
+//        };
+//
+//        self.send_response(delay_ms, nae_auth, client_auth, g(res));
+//        Ok(())
+//    }
 
-    #[allow(clippy::too_many_arguments)]
-    fn mutate_mdata<F, G, R>(
-        &mut self,
-        dst: Authority<XorName>,
-        name: XorName,
-        tag: u64,
-        request: Request,
-        requester: PublicKey,
-        log_label: &str,
-        delay_ms: u64,
-        f: F,
-        g: G,
-    ) -> Result<(), InterfaceError>
-    where
-        F: FnOnce(&mut MutableData) -> Result<R, ClientError>,
-        G: FnOnce(Result<R, ClientError>) -> Response,
-    {
-        let client_key = self.client_key();
-        let mutate = |mut data: MutableData, vault: &mut Vault| {
-            vault.authorise_mutation(&dst, &client_key)?;
-
-            let output = f(&mut data)?;
-            vault.insert_data(DataId::OldMutable { name, tag }, Data::OldMutable(data));
-            vault.commit_mutation(&dst.name());
-
-            Ok(output)
-        };
-
-        self.with_mdata(
-            name,
-            tag,
-            request,
-            Some(requester),
-            log_label,
-            delay_ms,
-            true,
-            mutate,
-            g,
-        )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn with_mdata<F, G, R>(
-        &mut self,
-        name: XorName,
-        tag: u64,
-        request: Request,
-        requester: Option<PublicKey>,
-        log_label: &str,
-        delay_ms: u64,
-        write: bool,
-        f: F,
-        g: G,
-    ) -> Result<(), InterfaceError>
-    where
-        F: FnOnce(MutableData, &mut Vault) -> Result<R, ClientError>,
-        G: FnOnce(Result<R, ClientError>) -> Response,
-    {
-        let client_auth = self.client_auth;
-        let nae_auth = Authority::NaeManager(name);
-        let msg_id = *request.message_id();
-
-        if self.intercept_request(delay_ms, nae_auth, client_auth, move || request) {
-            return Ok(());
-        }
-
-        let res = if let Err(err) = self.verify_network_limits(msg_id, log_label) {
-            Err(err)
-        } else if let Err(err) = self.verify_requester(requester) {
-            Err(err)
-        } else {
-            let mut vault = self.lock_vault(write);
-            match vault.get_data(&DataId::OldMutable { name, tag }) {
-                Some(Data::OldMutable(data)) => f(data, &mut *vault),
-                _ => {
-                    if tag == TYPE_TAG_SESSION_PACKET {
-                        Err(ClientError::NoSuchAccount)
-                    } else {
-                        Err(ClientError::NoSuchData)
-                    }
-                }
-            }
-        };
-
-        self.send_response(delay_ms, nae_auth, client_auth, g(res));
-        Ok(())
-    }
-
-    fn verify_owner(
-        dst: &Authority<XorName>,
-        owner_keys: &BTreeSet<PublicKey>,
-    ) -> Result<(), ClientError> {
-        let dst_name = match *dst {
-            Authority::ClientManager(name) => name,
-            _ => return Err(ClientError::InvalidOwners),
-        };
-
-        let ok = owner_keys
-            .iter()
-            .any(|owner_key| XorName::from(*owner_key) == dst_name);
-
-        if ok {
-            Ok(())
-        } else {
-            Err(ClientError::InvalidOwners)
-        }
-    }
-
-    fn verify_requester(&self, requester: Option<PublicKey>) -> Result<(), ClientError> {
-        let requester = match requester {
-            Some(key) => key,
-            None => return Ok(()),
-        };
-
-        if self.client_key() == requester {
-            Ok(())
-        } else {
-            Err(ClientError::from("Invalid requester"))
-        }
-    }
+//    fn verify_owner(
+//        dst: &Authority<XorName>,
+//        owner_keys: &BTreeSet<PublicKey>,
+//    ) -> Result<(), ClientError> {
+//        let dst_name = match *dst {
+//            Authority::ClientManager(name) => name,
+//            _ => return Err(ClientError::InvalidOwners),
+//        };
+//
+//        let ok = owner_keys
+//            .iter()
+//            .any(|owner_key| XorName::from(*owner_key) == dst_name);
+//
+//        if ok {
+//            Ok(())
+//        } else {
+//            Err(ClientError::InvalidOwners)
+//        }
+//    }
+//
+//    fn verify_requester(&self, requester: Option<PublicKey>) -> Result<(), ClientError> {
+//        let requester = match requester {
+//            Some(key) => key,
+//            None => return Ok(()),
+//        };
+//
+//        if self.client_key() == requester {
+//            Ok(())
+//        } else {
+//            Err(ClientError::from("Invalid requester"))
+//        }
+//    }
 
     fn lock_vault(&self, write: bool) -> VaultGuard {
         vault::lock(&self.vault, write)

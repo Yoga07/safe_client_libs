@@ -12,7 +12,7 @@ use crate::client::mock::routing::unlimited_muts;
 use crate::config_handler::{Config, DevConfig};
 use fs2::FileExt;
 use maidsafe_utilities::serialisation::{deserialise, serialise};
-use routing::{Authority, ClientError, MutableData as OldMutableData};
+use routing::{Authority, ClientError };
 use safe_nd::{
     verify_signature, AData, ADataAction, ADataAddress, ADataIndex, AppPermissions, AppendOnlyData,
     Coins, Error as SndError, IData, IDataAddress, LoginPacket, MData, MDataAction, MDataAddress,
@@ -33,7 +33,6 @@ use std::time::SystemTime;
 #[derive(Clone, Deserialize, Serialize)]
 pub enum Data {
     Immutable(IData),
-    OldMutable(OldMutableData),
     NewMutable(MData),
     AppendOnly(AData),
 }

@@ -37,22 +37,22 @@ use std::sync::mpsc;
 use std::time::Duration;
 use tiny_keccak::sha3_256;
 
-#[cfg(feature = "mock-network")]
-mod mock_routing {
-    use super::utils;
-    use crate::access_container as access_container_tools;
-    use crate::errors::AuthError;
-    use crate::run;
-    use crate::std_dirs::{DEFAULT_PRIVATE_DIRS, DEFAULT_PUBLIC_DIRS};
-    use crate::{test_utils, Authenticator};
-    use futures::Future;
-    use routing::{ClientError, Request, Response};
-    use safe_core::ipc::AuthReq;
-    use safe_core::nfs::NfsError;
-    use safe_core::utils::{generate_random_string, test_utils::random_client};
-    use safe_core::{app_container_name, Client, CoreError, MockRouting};
-    use safe_nd::{Coins, Error as SndError, PublicKey};
-    use std::str::FromStr;
+//#[cfg(feature = "mock-network")]
+//mod mock_routing {
+//    use super::utils;
+//    use crate::access_container as access_container_tools;
+//    use crate::errors::AuthError;
+//    use crate::run;
+//    use crate::std_dirs::{DEFAULT_PRIVATE_DIRS, DEFAULT_PUBLIC_DIRS};
+//    use crate::{test_utils, Authenticator};
+//    use futures::Future;
+//    use routing::{ClientError, Request, Response};
+//    use safe_core::ipc::AuthReq;
+//    use safe_core::nfs::NfsError;
+//    use safe_core::utils::{generate_random_string, test_utils::random_client};
+//    use safe_core::{app_container_name, Client, CoreError, MockRouting};
+//    use safe_nd::{Coins, Error as SndError, PublicKey};
+//    use std::str::FromStr;
 
     // Test operation recovery for std dirs creation.
     // 1. Try to create a new user's account using `safe_authenticator::Authenticator::create_acc`
@@ -65,135 +65,135 @@ mod mock_routing {
     // 4. Check that after logging in the remaining default directories have been created
     //    (= operation recovery worked after log in)
     // 5. Check the access container entry in the user's config root - it must be accessible
-    #[test]
-    #[ignore]
-    fn std_dirs_recovery() {
-        use safe_core::DIR_TAG;
-
-        // Add a request hook to forbid root dir modification. In this case
-        // account creation operation will be failed, but login still should
-        // be possible afterwards.
-        let locator = unwrap!(generate_random_string(10));
-        let password = unwrap!(generate_random_string(10));
-        let balance_sk = threshold_crypto::SecretKey::random();
-        let balance_pk = balance_sk.public_key();
-        random_client(move |client| {
-            client.test_create_balance(balance_pk.into(), unwrap!(Coins::from_str("10")));
-            Ok::<_, AuthError>(())
-        });
-
-        {
-            let routing_hook = move |mut routing: MockRouting| -> MockRouting {
-                let mut put_mdata_counter = 0;
-
-                routing.set_request_hook(move |req| {
-                    match *req {
-                        Request::PutMData {
-                            ref data, msg_id, ..
-                        } if data.tag() == DIR_TAG => {
-                            put_mdata_counter += 1;
-
-                            if put_mdata_counter > 4 {
-                                Some(Response::PutMData {
-                                    msg_id,
-                                    res: Err(ClientError::LowBalance),
-                                })
-                            } else {
-                                None
-                            }
-                        }
-                        // Pass-through
-                        _ => None,
-                    }
-                });
-                routing
-            };
-
-            let authenticator = Authenticator::create_acc_with_hook(
-                locator.clone(),
-                password.clone(),
-                balance_sk,
-                || (),
-                routing_hook,
-            );
-
-            // This operation should fail
-            match authenticator {
-                Err(AuthError::AccountContainersCreation(_)) => (),
-                Err(x) => panic!("Unexpected error {:?}", x),
-                Ok(_) => panic!("Unexpected success"),
-            }
-        }
-
-        // Log in using the same credentials
-        let authenticator = unwrap!(Authenticator::login(locator, password, || ()));
-
-        // Make sure that all default directories have been created after log in.
-        let std_dir_names: Vec<_> = DEFAULT_PRIVATE_DIRS
-            .iter()
-            .cloned()
-            .chain(DEFAULT_PUBLIC_DIRS.iter().cloned())
-            .collect();
-
-        // Verify that the access container has been created and
-        // fetch the entries of the root authenticator entry.
-        let (_entry_version, entries) = unwrap!(run(&authenticator, |client| {
-            access_container_tools::fetch_authenticator_entry(client).map_err(AuthError::from)
-        }));
-
-        // Verify that all the std dirs are there.
-        for name in std_dir_names {
-            assert!(entries.contains_key(name));
-        }
-    }
-
-    // Ensure that users can log in with low account balance.
-    #[test]
-    fn login_with_low_balance() {
-        // Register a hook prohibiting mutations and login
-        let routing_hook = move |mut routing: MockRouting| -> MockRouting {
-            routing.set_request_hook(move |req| {
-                match *req {
-                    Request::PutIData { msg_id, .. } => Some(Response::PutIData {
-                        res: Err(ClientError::LowBalance),
-                        msg_id,
-                    }),
-                    Request::PutMData { msg_id, .. } => Some(Response::PutMData {
-                        res: Err(ClientError::LowBalance),
-                        msg_id,
-                    }),
-                    Request::MutateMDataEntries { msg_id, .. } => {
-                        Some(Response::MutateMDataEntries {
-                            res: Err(ClientError::LowBalance),
-                            msg_id,
-                        })
-                    }
-                    Request::SetMDataUserPermissions { msg_id, .. } => {
-                        Some(Response::SetMDataUserPermissions {
-                            res: Err(ClientError::LowBalance),
-                            msg_id,
-                        })
-                    }
-                    Request::DelMDataUserPermissions { msg_id, .. } => {
-                        Some(Response::DelMDataUserPermissions {
-                            res: Err(ClientError::LowBalance),
-                            msg_id,
-                        })
-                    }
-                    Request::ChangeMDataOwner { msg_id, .. } => Some(Response::ChangeMDataOwner {
-                        res: Err(ClientError::LowBalance),
-                        msg_id,
-                    }),
-                    // Pass-through
-                    _ => None,
-                }
-            });
-            routing
-        };
-
-        // Make sure we can log in
-        let _authenticator = test_utils::create_account_and_login_with_hook(routing_hook);
-    }
+//    #[test]
+//    #[ignore]
+//    fn std_dirs_recovery() {
+//        use safe_core::DIR_TAG;
+//
+//        // Add a request hook to forbid root dir modification. In this case
+//        // account creation operation will be failed, but login still should
+//        // be possible afterwards.
+//        let locator = unwrap!(generate_random_string(10));
+//        let password = unwrap!(generate_random_string(10));
+//        let balance_sk = threshold_crypto::SecretKey::random();
+//        let balance_pk = balance_sk.public_key();
+//        random_client(move |client| {
+//            client.test_create_balance(balance_pk.into(), unwrap!(Coins::from_str("10")));
+//            Ok::<_, AuthError>(())
+//        });
+//
+//        {
+//            let routing_hook = move |mut routing: MockRouting| -> MockRouting {
+//                let mut put_mdata_counter = 0;
+//
+//                routing.set_request_hook(move |req| {
+//                    match *req {
+//                        Request::PutMData {
+//                            ref data, msg_id, ..
+//                        } if data.tag() == DIR_TAG => {
+//                            put_mdata_counter += 1;
+//
+//                            if put_mdata_counter > 4 {
+//                                Some(Response::PutMData {
+//                                    msg_id,
+//                                    res: Err(ClientError::LowBalance),
+//                                })
+//                            } else {
+//                                None
+//                            }
+//                        }
+//                        // Pass-through
+//                        _ => None,
+//                    }
+//                });
+//                routing
+//            };
+//
+//            let authenticator = Authenticator::create_acc_with_hook(
+//                locator.clone(),
+//                password.clone(),
+//                balance_sk,
+//                || (),
+//                routing_hook,
+//            );
+//
+//            // This operation should fail
+//            match authenticator {
+//                Err(AuthError::AccountContainersCreation(_)) => (),
+//                Err(x) => panic!("Unexpected error {:?}", x),
+//                Ok(_) => panic!("Unexpected success"),
+//            }
+//        }
+//
+//        // Log in using the same credentials
+//        let authenticator = unwrap!(Authenticator::login(locator, password, || ()));
+//
+//        // Make sure that all default directories have been created after log in.
+//        let std_dir_names: Vec<_> = DEFAULT_PRIVATE_DIRS
+//            .iter()
+//            .cloned()
+//            .chain(DEFAULT_PUBLIC_DIRS.iter().cloned())
+//            .collect();
+//
+//        // Verify that the access container has been created and
+//        // fetch the entries of the root authenticator entry.
+//        let (_entry_version, entries) = unwrap!(run(&authenticator, |client| {
+//            access_container_tools::fetch_authenticator_entry(client).map_err(AuthError::from)
+//        }));
+//
+//        // Verify that all the std dirs are there.
+//        for name in std_dir_names {
+//            assert!(entries.contains_key(name));
+//        }
+//    }
+//
+//    // Ensure that users can log in with low account balance.
+//    #[test]
+//    fn login_with_low_balance() {
+//        // Register a hook prohibiting mutations and login
+//        let routing_hook = move |mut routing: MockRouting| -> MockRouting {
+//            routing.set_request_hook(move |req| {
+//                match *req {
+//                    Request::PutIData { msg_id, .. } => Some(Response::PutIData {
+//                        res: Err(ClientError::LowBalance),
+//                        msg_id,
+//                    }),
+//                    Request::PutMData { msg_id, .. } => Some(Response::PutMData {
+//                        res: Err(ClientError::LowBalance),
+//                        msg_id,
+//                    }),
+//                    Request::MutateMDataEntries { msg_id, .. } => {
+//                        Some(Response::MutateMDataEntries {
+//                            res: Err(ClientError::LowBalance),
+//                            msg_id,
+//                        })
+//                    }
+//                    Request::SetMDataUserPermissions { msg_id, .. } => {
+//                        Some(Response::SetMDataUserPermissions {
+//                            res: Err(ClientError::LowBalance),
+//                            msg_id,
+//                        })
+//                    }
+//                    Request::DelMDataUserPermissions { msg_id, .. } => {
+//                        Some(Response::DelMDataUserPermissions {
+//                            res: Err(ClientError::LowBalance),
+//                            msg_id,
+//                        })
+//                    }
+//                    Request::ChangeMDataOwner { msg_id, .. } => Some(Response::ChangeMDataOwner {
+//                        res: Err(ClientError::LowBalance),
+//                        msg_id,
+//                    }),
+//                    // Pass-through
+//                    _ => None,
+//                }
+//            });
+//            routing
+//        };
+//
+//        // Make sure we can log in
+//        let _authenticator = test_utils::create_account_and_login_with_hook(routing_hook);
+//    }
 
     // Test operation recovery for app authentication.
     //
@@ -222,202 +222,202 @@ mod mock_routing {
     // 11. Check that the app's container has required permissions.
     // 12. Check that the app's container is listed in the access container entry for
     //     the app.
-    #[ignore]
-    #[test]
-    fn app_authentication_recovery() {
-        let locator = unwrap!(generate_random_string(10));
-        let password = unwrap!(generate_random_string(10));
-        let balance_sk = threshold_crypto::SecretKey::random();
-        let balance_pk = balance_sk.public_key();
-        random_client(move |client| {
-            client.test_create_balance(balance_pk.into(), unwrap!(Coins::from_str("10")));
-            Ok::<_, AuthError>(())
-        });
-
-        let routing_hook = move |mut routing: MockRouting| -> MockRouting {
-            routing.set_request_hook(move |req| {
-                match *req {
-                    // Simulate a network failure after
-                    // the `mutate_mdata_entries` operation (relating to
-                    // the addition of the app to the user's config dir)
-
-                    // TODO: fix this test
-                    // Request::InsAuthKey { msg_id, .. } => Some(Response::InsAuthKey {
-                    //     res: Err(ClientError::LowBalance),
-                    //     msg_id,
-                    // }),
-
-                    // Pass-through
-                    _ => None,
-                }
-            });
-            routing
-        };
-        let auth = unwrap!(Authenticator::create_acc_with_hook(
-            locator.clone(),
-            password.clone(),
-            balance_sk,
-            || (),
-            routing_hook,
-        ));
-
-        // Create a test app and try to authenticate it (with `app_container` set to true).
-        let auth_req = AuthReq {
-            app: test_utils::rand_app(),
-            app_container: true,
-            app_permissions: Default::default(),
-            containers: utils::create_containers_req(),
-        };
-        let app_id = auth_req.app.id.clone();
-
-        // App authentication request should fail and leave the app in the
-        // `Revoked` state (as it is listed in the config root, but not in the access
-        // container)
-        match test_utils::register_app(&auth, &auth_req) {
-            Err(AuthError::CoreError(CoreError::RoutingClientError(ClientError::LowBalance))) => (),
-            x => panic!("Unexpected {:?}", x),
-        }
-
-        // Simulate a network failure for the `update_container_perms` step -
-        // it should fail at the second container (`_videos`)
-        let routing_hook = move |mut routing: MockRouting| -> MockRouting {
-            let mut reqs_counter = 0;
-
-            routing.set_request_hook(move |req| {
-                match *req {
-                    Request::SetMDataUserPermissions { msg_id, .. } => {
-                        reqs_counter += 1;
-
-                        if reqs_counter == 2 {
-                            Some(Response::SetMDataUserPermissions {
-                                res: Err(ClientError::LowBalance),
-                                msg_id,
-                            })
-                        } else {
-                            None
-                        }
-                    }
-                    // Pass-through
-                    _ => None,
-                }
-            });
-            routing
-        };
-        let auth = unwrap!(Authenticator::login_with_hook(
-            locator.clone(),
-            password.clone(),
-            || (),
-            routing_hook,
-        ));
-        match test_utils::register_app(&auth, &auth_req) {
-            Err(AuthError::CoreError(CoreError::RoutingClientError(ClientError::LowBalance))) => (),
-            x => panic!("Unexpected {:?}", x),
-        }
-
-        // Simulate a network failure for the `app_container` setup step -
-        // it should fail at the third request for `SetMDataPermissions` (after
-        // setting permissions for 2 requested containers, `_video` and `_documents`)
-        let routing_hook = move |mut routing: MockRouting| -> MockRouting {
-            routing.set_request_hook(move |req| {
-                match *req {
-                    Request::PutMData { msg_id, .. } => Some(Response::PutMData {
-                        res: Err(ClientError::LowBalance),
-                        msg_id,
-                    }),
-                    // Pass-through
-                    _ => None,
-                }
-            });
-            routing
-        };
-        let auth = unwrap!(Authenticator::login_with_hook(
-            locator.clone(),
-            password.clone(),
-            || (),
-            routing_hook,
-        ));
-        match test_utils::register_app(&auth, &auth_req) {
-            Err(AuthError::NfsError(NfsError::CoreError(CoreError::RoutingClientError(
-                ClientError::LowBalance,
-            )))) => (),
-            x => panic!("Unexpected {:?}", x),
-        }
-
-        // Simulate a network failure for the `MutateMDataEntries` request, which
-        // is supposed to setup the access container entry for the app
-        let routing_hook = move |mut routing: MockRouting| -> MockRouting {
-            routing.set_request_hook(move |req| {
-                match *req {
-                    Request::MutateMDataEntries { msg_id, .. } => {
-                        // None
-                        Some(Response::SetMDataUserPermissions {
-                            res: Err(ClientError::LowBalance),
-                            msg_id,
-                        })
-                    }
-                    // Pass-through
-                    _ => None,
-                }
-            });
-            routing
-        };
-        let auth = unwrap!(Authenticator::login_with_hook(
-            locator.clone(),
-            password.clone(),
-            || (),
-            routing_hook,
-        ));
-        match test_utils::register_app(&auth, &auth_req) {
-            Err(AuthError::CoreError(CoreError::NewRoutingClientError(
-                SndError::InsufficientBalance,
-            ))) => (),
-            x => panic!("Unexpected {:?}", x),
-        }
-
-        // Now try to authenticate the app without network failure simulation -
-        // it should succeed.
-        let auth = unwrap!(Authenticator::login(
-            locator.clone(),
-            password.clone(),
-            || (),
-        ));
-        let auth_granted = match test_utils::register_app(&auth, &auth_req) {
-            Ok(auth_granted) => auth_granted,
-            x => panic!("Unexpected {:?}", x),
-        };
-
-        // Check that the app's container has been created and that the access container
-        // contains info about all of the requested containers.
-        let mut ac_entries =
-            test_utils::access_container(&auth, app_id.clone(), auth_granted.clone());
-        let (_videos_md, _) = unwrap!(ac_entries.remove("_videos"));
-        let (_documents_md, _) = unwrap!(ac_entries.remove("_documents"));
-        let (app_container, _) = unwrap!(ac_entries.remove(&app_container_name(&app_id)));
-
-        let app_pk = PublicKey::from(auth_granted.app_keys.bls_pk);
-
-        unwrap!(run(&auth, move |client| {
-            let c2 = client.clone();
-
-            client
-                .get_mdata_version_new(*app_container.address())
-                .then(move |res| {
-                    let version = unwrap!(res);
-                    assert_eq!(version, 0);
-
-                    // Check that the app's container has required permissions.
-                    c2.list_mdata_permissions_new(*app_container.address())
-                })
-                .then(move |res| {
-                    let perms = unwrap!(res);
-                    assert!(perms.contains_key(&app_pk));
-                    assert_eq!(perms.len(), 1);
-
-                    Ok(())
-                })
-        }));
-    }
-}
+//    #[ignore]
+//    #[test]
+//    fn app_authentication_recovery() {
+//        let locator = unwrap!(generate_random_string(10));
+//        let password = unwrap!(generate_random_string(10));
+//        let balance_sk = threshold_crypto::SecretKey::random();
+//        let balance_pk = balance_sk.public_key();
+//        random_client(move |client| {
+//            client.test_create_balance(balance_pk.into(), unwrap!(Coins::from_str("10")));
+//            Ok::<_, AuthError>(())
+//        });
+//
+//        let routing_hook = move |mut routing: MockRouting| -> MockRouting {
+//            routing.set_request_hook(move |req| {
+//                match *req {
+//                    // Simulate a network failure after
+//                    // the `mutate_mdata_entries` operation (relating to
+//                    // the addition of the app to the user's config dir)
+//
+//                    // TODO: fix this test
+//                    // Request::InsAuthKey { msg_id, .. } => Some(Response::InsAuthKey {
+//                    //     res: Err(ClientError::LowBalance),
+//                    //     msg_id,
+//                    // }),
+//
+//                    // Pass-through
+//                    _ => None,
+//                }
+//            });
+//            routing
+//        };
+//        let auth = unwrap!(Authenticator::create_acc_with_hook(
+//            locator.clone(),
+//            password.clone(),
+//            balance_sk,
+//            || (),
+//            routing_hook,
+//        ));
+//
+//        // Create a test app and try to authenticate it (with `app_container` set to true).
+//        let auth_req = AuthReq {
+//            app: test_utils::rand_app(),
+//            app_container: true,
+//            app_permissions: Default::default(),
+//            containers: utils::create_containers_req(),
+//        };
+//        let app_id = auth_req.app.id.clone();
+//
+//        // App authentication request should fail and leave the app in the
+//        // `Revoked` state (as it is listed in the config root, but not in the access
+//        // container)
+//        match test_utils::register_app(&auth, &auth_req) {
+//            Err(AuthError::CoreError(CoreError::RoutingClientError(ClientError::LowBalance))) => (),
+//            x => panic!("Unexpected {:?}", x),
+//        }
+//
+//        // Simulate a network failure for the `update_container_perms` step -
+//        // it should fail at the second container (`_videos`)
+//        let routing_hook = move |mut routing: MockRouting| -> MockRouting {
+//            let mut reqs_counter = 0;
+//
+//            routing.set_request_hook(move |req| {
+//                match *req {
+//                    Request::SetMDataUserPermissions { msg_id, .. } => {
+//                        reqs_counter += 1;
+//
+//                        if reqs_counter == 2 {
+//                            Some(Response::SetMDataUserPermissions {
+//                                res: Err(ClientError::LowBalance),
+//                                msg_id,
+//                            })
+//                        } else {
+//                            None
+//                        }
+//                    }
+//                    // Pass-through
+//                    _ => None,
+//                }
+//            });
+//            routing
+//        };
+//        let auth = unwrap!(Authenticator::login_with_hook(
+//            locator.clone(),
+//            password.clone(),
+//            || (),
+//            routing_hook,
+//        ));
+//        match test_utils::register_app(&auth, &auth_req) {
+//            Err(AuthError::CoreError(CoreError::RoutingClientError(ClientError::LowBalance))) => (),
+//            x => panic!("Unexpected {:?}", x),
+//        }
+//
+//        // Simulate a network failure for the `app_container` setup step -
+//        // it should fail at the third request for `SetMDataPermissions` (after
+//        // setting permissions for 2 requested containers, `_video` and `_documents`)
+//        let routing_hook = move |mut routing: MockRouting| -> MockRouting {
+//            routing.set_request_hook(move |req| {
+//                match *req {
+//                    Request::PutMData { msg_id, .. } => Some(Response::PutMData {
+//                        res: Err(ClientError::LowBalance),
+//                        msg_id,
+//                    }),
+//                    // Pass-through
+//                    _ => None,
+//                }
+//            });
+//            routing
+//        };
+//        let auth = unwrap!(Authenticator::login_with_hook(
+//            locator.clone(),
+//            password.clone(),
+//            || (),
+//            routing_hook,
+//        ));
+//        match test_utils::register_app(&auth, &auth_req) {
+//            Err(AuthError::NfsError(NfsError::CoreError(CoreError::RoutingClientError(
+//                ClientError::LowBalance,
+//            )))) => (),
+//            x => panic!("Unexpected {:?}", x),
+//        }
+//
+//        // Simulate a network failure for the `MutateMDataEntries` request, which
+//        // is supposed to setup the access container entry for the app
+//        let routing_hook = move |mut routing: MockRouting| -> MockRouting {
+//            routing.set_request_hook(move |req| {
+//                match *req {
+//                    Request::MutateMDataEntries { msg_id, .. } => {
+//                        // None
+//                        Some(Response::SetMDataUserPermissions {
+//                            res: Err(ClientError::LowBalance),
+//                            msg_id,
+//                        })
+//                    }
+//                    // Pass-through
+//                    _ => None,
+//                }
+//            });
+//            routing
+//        };
+//        let auth = unwrap!(Authenticator::login_with_hook(
+//            locator.clone(),
+//            password.clone(),
+//            || (),
+//            routing_hook,
+//        ));
+//        match test_utils::register_app(&auth, &auth_req) {
+//            Err(AuthError::CoreError(CoreError::NewRoutingClientError(
+//                SndError::InsufficientBalance,
+//            ))) => (),
+//            x => panic!("Unexpected {:?}", x),
+//        }
+//
+//        // Now try to authenticate the app without network failure simulation -
+//        // it should succeed.
+//        let auth = unwrap!(Authenticator::login(
+//            locator.clone(),
+//            password.clone(),
+//            || (),
+//        ));
+//        let auth_granted = match test_utils::register_app(&auth, &auth_req) {
+//            Ok(auth_granted) => auth_granted,
+//            x => panic!("Unexpected {:?}", x),
+//        };
+//
+//        // Check that the app's container has been created and that the access container
+//        // contains info about all of the requested containers.
+//        let mut ac_entries =
+//            test_utils::access_container(&auth, app_id.clone(), auth_granted.clone());
+//        let (_videos_md, _) = unwrap!(ac_entries.remove("_videos"));
+//        let (_documents_md, _) = unwrap!(ac_entries.remove("_documents"));
+//        let (app_container, _) = unwrap!(ac_entries.remove(&app_container_name(&app_id)));
+//
+//        let app_pk = PublicKey::from(auth_granted.app_keys.bls_pk);
+//
+//        unwrap!(run(&auth, move |client| {
+//            let c2 = client.clone();
+//
+//            client
+//                .get_mdata_version_new(*app_container.address())
+//                .then(move |res| {
+//                    let version = unwrap!(res);
+//                    assert_eq!(version, 0);
+//
+//                    // Check that the app's container has required permissions.
+//                    c2.list_mdata_permissions_new(*app_container.address())
+//                })
+//                .then(move |res| {
+//                    let perms = unwrap!(res);
+//                    assert!(perms.contains_key(&app_pk));
+//                    assert_eq!(perms.len(), 1);
+//
+//                    Ok(())
+//                })
+//        }));
+//    }
+//}
 
 // Test creation and content of std dirs after account creation.
 #[test]

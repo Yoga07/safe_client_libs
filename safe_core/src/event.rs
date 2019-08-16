@@ -8,10 +8,8 @@
 
 use crate::errors::CoreError;
 use futures::sync::mpsc;
-use routing::{AccountInfo, MutableData, PermissionSet, User, Value};
-use rust_sodium::crypto::sign;
+use routing::AccountInfo;
 use safe_nd::PubImmutableData;
-use std::collections::{BTreeMap, BTreeSet};
 
 /// Network Events will be translated into values starting from this number for
 /// propagating them beyond the FFI boudaries when required
@@ -28,25 +26,6 @@ pub enum CoreEvent {
     /// Result of getting `PubImmutableData`
     GetIData(Result<PubImmutableData, CoreError>),
     /// Result of getting a version of `MutableData`
-    GetMDataVersion(Result<u64, CoreError>),
-    /// Result of getting a list of `MutableData` entries
-    ListMDataEntries(Result<BTreeMap<Vec<u8>, Value>, CoreError>),
-    /// Result of getting a list of `MutableData` keys
-    ListMDataKeys(Result<BTreeSet<Vec<u8>>, CoreError>),
-    /// Result of getting a list of `MutableData` keys
-    ListMDataValues(Result<Vec<Value>, CoreError>),
-    /// Result of getting a single value from `MutableData`
-    GetMDataValue(Result<Value, CoreError>),
-    /// Result of getting a list of all `MutableData` permissions
-    ListMDataPermissions(Result<BTreeMap<User, PermissionSet>, CoreError>),
-    /// Result of getting a list of permissions in `MutableData` for a single user
-    ListMDataUserPermissions(Result<PermissionSet, CoreError>),
-    /// Result of getting a list of authorised keys
-    ListAuthKeysAndVersion(Result<(BTreeSet<sign::PublicKey>, u64), CoreError>),
-    /// Result of getting a mutable data shell
-    GetMDataShell(Result<MutableData, CoreError>),
-    /// Result of getting entire mutable data
-    GetMData(Result<MutableData, CoreError>),
     /// RpcResponse
     RpcResponse(Result<Vec<u8>, CoreError>),
     /// Rate limit exeeded

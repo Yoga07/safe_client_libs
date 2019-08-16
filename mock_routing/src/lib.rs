@@ -6,25 +6,18 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-use maidsafe_utilities::serialisation;
-use rand::{Rand, Rng};
 use rust_sodium::crypto::{box_, sign};
 use safe_nd::{
-    Error as SndError, MDataAction, MDataPermissionSet, MDataSeqEntryAction, MDataSeqEntryActions,
-    MDataSeqValue, MessageId as MsgId, PubImmutableData, PublicKey, SeqMutableData,
+    Error as SndError, MessageId as MsgId, PubImmutableData,
 };
 pub use safe_nd::{XorName, XOR_NAME_LEN};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::collections::{
-    btree_map::{BTreeMap, Entry},
-    BTreeSet,
-};
+use std::collections::btree_map::BTreeMap;
 use std::error::Error;
 use std::fmt::{self, Debug, Display, Formatter};
-use std::mem;
 use tiny_keccak::sha3_256;
 
-#[macro_use]
+//#[macro_use]
 extern crate unwrap;
 
 #[allow(clippy::large_enum_variant)]
@@ -209,771 +202,771 @@ pub enum EntryError {
 }
 
 /// Mutable data.
-#[derive(Hash, Eq, PartialEq, PartialOrd, Ord, Clone, Serialize, Deserialize)]
-pub struct MutableData {
-    /// Network address
-    name: XorName,
-    /// Type tag
-    tag: u64,
-    // ---- owner and vault access only ----
-    /// Maps an arbitrary key to a (version, data) tuple value
-    data: BTreeMap<Vec<u8>, Value>,
-    /// Maps an application key to a list of allowed or forbidden actions
-    permissions: BTreeMap<User, PermissionSet>,
-    /// Version should be increased for every change in MutableData fields
-    /// except for data
-    pub version: u64,
-    /// Contains a set of owners which are allowed to mutate permissions.
-    /// Currently limited to one owner to disallow multisig.
-    owners: BTreeSet<PublicKey>,
-}
+//#[derive(Hash, Eq, PartialEq, PartialOrd, Ord, Clone, Serialize, Deserialize)]
+//pub struct MutableData {
+//    /// Network address
+//    name: XorName,
+//    /// Type tag
+//    tag: u64,
+//    // ---- owner and vault access only ----
+//    /// Maps an arbitrary key to a (version, data) tuple value
+//    data: BTreeMap<Vec<u8>, Value>,
+//    /// Maps an application key to a list of allowed or forbidden actions
+//    permissions: BTreeMap<User, PermissionSet>,
+//    /// Version should be increased for every change in MutableData fields
+//    /// except for data
+//    pub version: u64,
+//    /// Contains a set of owners which are allowed to mutate permissions.
+//    /// Currently limited to one owner to disallow multisig.
+//    owners: BTreeSet<PublicKey>,
+//}
 
 // Wrapper to wrap the old entries map for conversion
-pub struct OldEntries(pub BTreeMap<Vec<u8>, Value>);
+//pub struct OldEntries(pub BTreeMap<Vec<u8>, Value>);
 // Wrapper to wrap the old permissions map for conversion
-pub struct OldPermissions(pub BTreeMap<User, PermissionSet>);
+//pub struct OldPermissions(pub BTreeMap<User, PermissionSet>);
 
-impl Into<SeqMutableData> for MutableData {
-    fn into(self) -> SeqMutableData {
-        SeqMutableData::new_with_data(
-            *self.name(),
-            self.tag(),
-            OldEntries(self.entries().clone()).into(),
-            OldPermissions(self.permissions().clone()).into(),
-            *unwrap!(self.owners().iter().next()),
-        )
-    }
-}
+//impl Into<SeqMutableData> for MutableData {
+//    fn into(self) -> SeqMutableData {
+//        SeqMutableData::new_with_data(
+//            *self.name(),
+//            self.tag(),
+//            OldEntries(self.entries().clone()).into(),
+//            OldPermissions(self.permissions().clone()).into(),
+//            *unwrap!(self.owners().iter().next()),
+//        )
+//    }
+//}
+//
+//impl From<SeqMutableData> for MutableData {
+//    fn from(seq_mdata: SeqMutableData) -> Self {
+//        let mut owner_set = BTreeSet::new();
+//        owner_set.insert(seq_mdata.owner().clone());
+//        let mut mdata = unwrap!(MutableData::new(
+//            *seq_mdata.address().name(),
+//            seq_mdata.address().tag(),
+//            OldPermissions::from(seq_mdata.permissions().clone()).0,
+//            OldEntries::from(seq_mdata.entries().clone()).0,
+//            owner_set
+//        ));
+//        mdata.version = seq_mdata.version();
+//        mdata
+//    }
+//}
 
-impl From<SeqMutableData> for MutableData {
-    fn from(seq_mdata: SeqMutableData) -> Self {
-        let mut owner_set = BTreeSet::new();
-        owner_set.insert(seq_mdata.owner().clone());
-        let mut mdata = unwrap!(MutableData::new(
-            *seq_mdata.address().name(),
-            seq_mdata.address().tag(),
-            OldPermissions::from(seq_mdata.permissions().clone()).0,
-            OldEntries::from(seq_mdata.entries().clone()).0,
-            owner_set
-        ));
-        mdata.version = seq_mdata.version();
-        mdata
-    }
-}
+//impl Into<BTreeMap<Vec<u8>, MDataSeqValue>> for OldEntries {
+//    fn into(self) -> BTreeMap<Vec<u8>, MDataSeqValue> {
+//        self.0
+//            .into_iter()
+//            .map(|(key, value)| (key, value.into()))
+//            .collect()
+//    }
+//}
 
-impl Into<BTreeMap<Vec<u8>, MDataSeqValue>> for OldEntries {
-    fn into(self) -> BTreeMap<Vec<u8>, MDataSeqValue> {
-        self.0
-            .into_iter()
-            .map(|(key, value)| (key, value.into()))
-            .collect()
-    }
-}
+//impl From<BTreeMap<Vec<u8>, MDataSeqValue>> for OldEntries {
+//    fn from(entries: BTreeMap<Vec<u8>, MDataSeqValue>) -> Self {
+//        Self(
+//            entries
+//                .into_iter()
+//                .map(|(key, value)| (key, value.into()))
+//                .collect(),
+//        )
+//    }
+//}
+//
+//impl Into<BTreeMap<PublicKey, MDataPermissionSet>> for OldPermissions {
+//    fn into(self) -> BTreeMap<PublicKey, MDataPermissionSet> {
+//        self.0
+//            .into_iter()
+//            .filter_map(|(user, permission_set)| {
+//                if let User::Key(public_key) = user {
+//                    Some((public_key, permission_set.into()))
+//                } else {
+//                    // User::Anyone is not supported
+//                    None
+//                }
+//            })
+//            .collect()
+//    }
+//}
 
-impl From<BTreeMap<Vec<u8>, MDataSeqValue>> for OldEntries {
-    fn from(entries: BTreeMap<Vec<u8>, MDataSeqValue>) -> Self {
-        Self(
-            entries
-                .into_iter()
-                .map(|(key, value)| (key, value.into()))
-                .collect(),
-        )
-    }
-}
-
-impl Into<BTreeMap<PublicKey, MDataPermissionSet>> for OldPermissions {
-    fn into(self) -> BTreeMap<PublicKey, MDataPermissionSet> {
-        self.0
-            .into_iter()
-            .filter_map(|(user, permission_set)| {
-                if let User::Key(public_key) = user {
-                    Some((public_key, permission_set.into()))
-                } else {
-                    // User::Anyone is not supported
-                    None
-                }
-            })
-            .collect()
-    }
-}
-
-impl From<BTreeMap<PublicKey, MDataPermissionSet>> for OldPermissions {
-    fn from(permission_set: BTreeMap<PublicKey, MDataPermissionSet>) -> Self {
-        Self(
-            permission_set
-                .into_iter()
-                .map(|(key, permission_set)| (User::Key(key), permission_set.into()))
-                .collect(),
-        )
-    }
-}
+//impl From<BTreeMap<PublicKey, MDataPermissionSet>> for OldPermissions {
+//    fn from(permission_set: BTreeMap<PublicKey, MDataPermissionSet>) -> Self {
+//        Self(
+//            permission_set
+//                .into_iter()
+//                .map(|(key, permission_set)| (User::Key(key), permission_set.into()))
+//                .collect(),
+//        )
+//    }
+//}
 
 /// A value in `MutableData`
-#[derive(Hash, Eq, PartialEq, PartialOrd, Ord, Clone, Serialize, Deserialize, Debug)]
-pub struct Value {
-    /// Content of the entry.
-    pub content: Vec<u8>,
-    /// Version of the entry.
-    pub entry_version: u64,
-}
+//#[derive(Hash, Eq, PartialEq, PartialOrd, Ord, Clone, Serialize, Deserialize, Debug)]
+//pub struct Value {
+//    /// Content of the entry.
+//    pub content: Vec<u8>,
+//    /// Version of the entry.
+//    pub entry_version: u64,
+//}
 
-impl Into<MDataSeqValue> for Value {
-    fn into(self) -> MDataSeqValue {
-        MDataSeqValue {
-            data: self.content,
-            version: self.entry_version,
-        }
-    }
-}
-
-impl From<MDataSeqValue> for Value {
-    fn from(value: MDataSeqValue) -> Self {
-        Self {
-            content: value.data,
-            entry_version: value.version,
-        }
-    }
-}
+//impl Into<MDataSeqValue> for Value {
+//    fn into(self) -> MDataSeqValue {
+//        MDataSeqValue {
+//            data: self.content,
+//            version: self.entry_version,
+//        }
+//    }
+//}
+//
+//impl From<MDataSeqValue> for Value {
+//    fn from(value: MDataSeqValue) -> Self {
+//        Self {
+//            content: value.data,
+//            entry_version: value.version,
+//        }
+//    }
+//}
 
 /// Subject of permissions
-#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum User {
-    /// Permissions apply to anyone.
-    Anyone,
-    /// Permissions apply to a single public key.
-    Key(PublicKey),
-}
+//#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
+//pub enum User {
+//    /// Permissions apply to anyone.
+//    Anyone,
+//    /// Permissions apply to a single public key.
+//    Key(PublicKey),
+//}
 
 /// Action a permission applies to
-#[derive(Debug, Hash, Eq, PartialEq, PartialOrd, Ord, Copy, Clone, Serialize, Deserialize)]
-pub enum Action {
-    /// Permission to insert new entries.
-    Insert,
-    /// Permission to update existing entries.
-    Update,
-    /// Permission to delete existing entries.
-    Delete,
-    /// Permission to modify permissions for other users.
-    ManagePermissions,
-}
+//#[9(Debug, Hash, Eq, PartialEq, PartialOrd, Ord, Copy, Clone, Serialize, Deserialize)]
+//pub enum Action {
+//    /// Permission to insert new entries.
+//    Insert,
+//    /// Permission to update existing entries.
+//    Update,
+//    /// Permission to delete existing entries.
+//    Delete,
+//    /// Permission to modify permissions for other users.
+//    ManagePermissions,
+//}
 
 /// Set of user permissions.
-#[derive(
-    Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize, Deserialize, Default,
-)]
-pub struct PermissionSet {
-    insert: Option<bool>,
-    update: Option<bool>,
-    delete: Option<bool>,
-    manage_permissions: Option<bool>,
-}
+//#[derive(
+//    Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, Serialize, Deserialize, Default,
+//)]
+//pub struct PermissionSet {
+//    insert: Option<bool>,
+//    update: Option<bool>,
+//    delete: Option<bool>,
+//    manage_permissions: Option<bool>,
+//}
 
-impl Into<MDataPermissionSet> for PermissionSet {
-    fn into(self) -> MDataPermissionSet {
-        let actions = [
-            (Action::Insert, MDataAction::Insert),
-            (Action::Update, MDataAction::Update),
-            (Action::Delete, MDataAction::Delete),
-            (Action::ManagePermissions, MDataAction::ManagePermissions),
-        ];
-        actions
-            .iter()
-            .fold(MDataPermissionSet::new(), |new_set, action_pair| {
-                if self.is_allowed(action_pair.0) == Some(true) {
-                    new_set.allow(MDataAction::Read).allow(action_pair.1)
-                } else {
-                    new_set
-                }
-            })
-    }
-}
+//impl Into<MDataPermissionSet> for PermissionSet {
+//    fn into(self) -> MDataPermissionSet {
+//        let actions = [
+//            (Action::Insert, MDataAction::Insert),
+//            (Action::Update, MDataAction::Update),
+//            (Action::Delete, MDataAction::Delete),
+//            (Action::ManagePermissions, MDataAction::ManagePermissions),
+//        ];
+//        actions
+//            .iter()
+//            .fold(MDataPermissionSet::new(), |new_set, action_pair| {
+//                if self.is_allowed(action_pair.0) == Some(true) {
+//                    new_set.allow(MDataAction::Read).allow(action_pair.1)
+//                } else {
+//                    new_set
+//                }
+//            })
+//    }
+//}
 
-impl From<MDataPermissionSet> for PermissionSet {
-    fn from(permission_set: MDataPermissionSet) -> Self {
-        let actions = [
-            (Action::Insert, MDataAction::Insert),
-            (Action::Update, MDataAction::Update),
-            (Action::Delete, MDataAction::Delete),
-            (Action::ManagePermissions, MDataAction::ManagePermissions),
-        ];
-        actions
-            .iter()
-            .fold(PermissionSet::new(), |old_set, action_pair| {
-                if permission_set.is_allowed(action_pair.1) {
-                    old_set.allow(action_pair.0)
-                } else {
-                    old_set
-                }
-            })
-    }
-}
+//impl From<MDataPermissionSet> for PermissionSet {
+//    fn from(permission_set: MDataPermissionSet) -> Self {
+//        let actions = [
+//            (Action::Insert, MDataAction::Insert),
+//            (Action::Update, MDataAction::Update),
+//            (Action::Delete, MDataAction::Delete),
+//            (Action::ManagePermissions, MDataAction::ManagePermissions),
+//        ];
+//        actions
+//            .iter()
+//            .fold(PermissionSet::new(), |old_set, action_pair| {
+//                if permission_set.is_allowed(action_pair.1) {
+//                    old_set.allow(action_pair.0)
+//                } else {
+//                    old_set
+//                }
+//            })
+//    }
+//}
 
-impl PermissionSet {
-    /// Construct new permission set.
-    pub fn new() -> PermissionSet {
-        PermissionSet {
-            insert: None,
-            update: None,
-            delete: None,
-            manage_permissions: None,
-        }
-    }
+//impl PermissionSet {
+//    /// Construct new permission set.
+//    pub fn new() -> PermissionSet {
+//        PermissionSet {
+//            insert: None,
+//            update: None,
+//            delete: None,
+//            manage_permissions: None,
+//        }
+//    }
+//
+//    /// Allow the given action.
+//    pub fn allow(mut self, action: Action) -> Self {
+//        match action {
+//            Action::Insert => self.insert = Some(true),
+//            Action::Update => self.update = Some(true),
+//            Action::Delete => self.delete = Some(true),
+//            Action::ManagePermissions => self.manage_permissions = Some(true),
+//        }
+//        self
+//    }
+//
+//    /// Deny the given action.
+//    pub fn deny(mut self, action: Action) -> Self {
+//        match action {
+//            Action::Insert => self.insert = Some(false),
+//            Action::Update => self.update = Some(false),
+//            Action::Delete => self.delete = Some(false),
+//            Action::ManagePermissions => self.manage_permissions = Some(false),
+//        }
+//        self
+//    }
+//
+//    /// Clear the permission for the given action.
+//    pub fn clear(mut self, action: Action) -> Self {
+//        match action {
+//            Action::Insert => self.insert = None,
+//            Action::Update => self.update = None,
+//            Action::Delete => self.delete = None,
+//            Action::ManagePermissions => self.manage_permissions = None,
+//        }
+//        self
+//    }
+//
+//    /// Is the given action allowed according to this permission set?
+//    pub fn is_allowed(self, action: Action) -> Option<bool> {
+//        match action {
+//            Action::Insert => self.insert,
+//            Action::Update => self.update,
+//            Action::Delete => self.delete,
+//            Action::ManagePermissions => self.manage_permissions,
+//        }
+//    }
+//}
 
-    /// Allow the given action.
-    pub fn allow(mut self, action: Action) -> Self {
-        match action {
-            Action::Insert => self.insert = Some(true),
-            Action::Update => self.update = Some(true),
-            Action::Delete => self.delete = Some(true),
-            Action::ManagePermissions => self.manage_permissions = Some(true),
-        }
-        self
-    }
-
-    /// Deny the given action.
-    pub fn deny(mut self, action: Action) -> Self {
-        match action {
-            Action::Insert => self.insert = Some(false),
-            Action::Update => self.update = Some(false),
-            Action::Delete => self.delete = Some(false),
-            Action::ManagePermissions => self.manage_permissions = Some(false),
-        }
-        self
-    }
-
-    /// Clear the permission for the given action.
-    pub fn clear(mut self, action: Action) -> Self {
-        match action {
-            Action::Insert => self.insert = None,
-            Action::Update => self.update = None,
-            Action::Delete => self.delete = None,
-            Action::ManagePermissions => self.manage_permissions = None,
-        }
-        self
-    }
-
-    /// Is the given action allowed according to this permission set?
-    pub fn is_allowed(self, action: Action) -> Option<bool> {
-        match action {
-            Action::Insert => self.insert,
-            Action::Update => self.update,
-            Action::Delete => self.delete,
-            Action::ManagePermissions => self.manage_permissions,
-        }
-    }
-}
-
-impl Rand for PermissionSet {
-    fn rand<R: Rng>(rng: &mut R) -> PermissionSet {
-        PermissionSet {
-            insert: Rand::rand(rng),
-            update: Rand::rand(rng),
-            delete: Rand::rand(rng),
-            manage_permissions: Rand::rand(rng),
-        }
-    }
-}
+//impl Rand for PermissionSet {
+//    fn rand<R: Rng>(rng: &mut R) -> PermissionSet {
+//        PermissionSet {
+//            insert: Rand::rand(rng),
+//            update: Rand::rand(rng),
+//            delete: Rand::rand(rng),
+//            manage_permissions: Rand::rand(rng),
+//        }
+//    }
+//}
 
 /// Action performed on a single entry: insert, update or delete.
-#[derive(Hash, Debug, Eq, PartialEq, Clone, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum EntryAction {
-    /// Inserts a new entry
-    Ins(Value),
-    /// Updates an entry with a new value and version
-    Update(Value),
-    /// Deletes an entry by emptying its contents. Contains the version number
-    Del(u64),
-}
+//#[derive(Hash, Debug, Eq, PartialEq, Clone, PartialOrd, Ord, Serialize, Deserialize)]
+//pub enum EntryAction {
+//    /// Inserts a new entry
+//    Ins(Value),
+//    /// Updates an entry with a new value and version
+//    Update(Value),
+//    /// Deletes an entry by emptying its contents. Contains the version number
+//    Del(u64),
+//}
+//
+//impl Into<MDataSeqEntryAction> for EntryAction {
+//    fn into(self) -> MDataSeqEntryAction {
+//        match self {
+//            EntryAction::Ins(val) => MDataSeqEntryAction::Ins(val.into()),
+//            EntryAction::Update(val) => MDataSeqEntryAction::Update(val.into()),
+//            EntryAction::Del(version) => MDataSeqEntryAction::Del(version),
+//        }
+//    }
+//}
+//
+///// Helper struct to build entry actions on `MutableData`
+//#[derive(Debug, Default, Clone)]
+//pub struct EntryActions {
+//    pub actions: BTreeMap<Vec<u8>, EntryAction>,
+//}
+//
+//impl EntryActions {
+//    /// Create a helper to simplify construction of `MutableData` actions
+//    pub fn new() -> Self {
+//        Default::default()
+//    }
+//
+//    /// Insert a new key-value pair
+//    pub fn ins(mut self, key: Vec<u8>, content: Vec<u8>, version: u64) -> Self {
+//        let _ = self.actions.insert(
+//            key,
+//            EntryAction::Ins(Value {
+//                entry_version: version,
+//                content,
+//            }),
+//        );
+//        self
+//    }
+//
+//    /// Update existing key-value pair
+//    pub fn update(mut self, key: Vec<u8>, content: Vec<u8>, version: u64) -> Self {
+//        let _ = self.actions.insert(
+//            key,
+//            EntryAction::Update(Value {
+//                entry_version: version,
+//                content,
+//            }),
+//        );
+//        self
+//    }
+//
+//    /// Delete existing key
+//    pub fn del(mut self, key: Vec<u8>, version: u64) -> Self {
+//        let _ = self.actions.insert(key, EntryAction::Del(version));
+//        self
+//    }
+//}
+//
+//impl Into<BTreeMap<Vec<u8>, EntryAction>> for EntryActions {
+//    fn into(self) -> BTreeMap<Vec<u8>, EntryAction> {
+//        self.actions
+//    }
+//}
+//
+//impl Into<MDataSeqEntryActions> for EntryActions {
+//    fn into(self) -> MDataSeqEntryActions {
+//        self.actions.into_iter().fold(
+//            MDataSeqEntryActions::new(),
+//            |new_actions, (key, old_action)| match old_action {
+//                EntryAction::Ins(value) => new_actions.ins(key, value.content, value.entry_version),
+//                EntryAction::Update(value) => {
+//                    new_actions.update(key, value.content, value.entry_version)
+//                }
+//                EntryAction::Del(version) => new_actions.del(key, version),
+//            },
+//        )
+//    }
+//}
 
-impl Into<MDataSeqEntryAction> for EntryAction {
-    fn into(self) -> MDataSeqEntryAction {
-        match self {
-            EntryAction::Ins(val) => MDataSeqEntryAction::Ins(val.into()),
-            EntryAction::Update(val) => MDataSeqEntryAction::Update(val.into()),
-            EntryAction::Del(version) => MDataSeqEntryAction::Del(version),
-        }
-    }
-}
+//impl MutableData {
+//    /// Creates a new MutableData
+//    #[allow(clippy::new_ret_no_self)]
+//    pub fn new(
+//        name: XorName,
+//        tag: u64,
+//        permissions: BTreeMap<User, PermissionSet>,
+//        data: BTreeMap<Vec<u8>, Value>,
+//        owners: BTreeSet<PublicKey>,
+//    ) -> Result<MutableData, ClientError> {
+//        let md = MutableData {
+//            name,
+//            tag,
+//            data,
+//            permissions,
+//            version: 0,
+//            owners,
+//        };
+//
+//        md.validate()?;
+//        Ok(md)
+//    }
+//
+//    /// Validate this data.
+//    pub fn validate(&self) -> Result<(), ClientError> {
+//        if self.owners.len() > 1 {
+//            return Err(ClientError::InvalidOwners);
+//        }
+//        if self.data.len() >= (MAX_MUTABLE_DATA_ENTRIES + 1) as usize {
+//            return Err(ClientError::TooManyEntries);
+//        }
+//
+//        if self.serialised_size() > MAX_MUTABLE_DATA_SIZE_IN_BYTES {
+//            return Err(ClientError::DataTooLarge);
+//        }
+//
+//        Ok(())
+//    }
+//
+//    /// Returns the shell of this data. Shell contains the same fields as the data itself,
+//    /// except the entries.
+//    pub fn shell(&self) -> MutableData {
+//        MutableData {
+//            name: self.name,
+//            tag: self.tag,
+//            data: BTreeMap::new(),
+//            permissions: self.permissions.clone(),
+//            version: self.version,
+//            owners: self.owners.clone(),
+//        }
+//    }
+//
+//    /// Returns the name.
+//    pub fn name(&self) -> &XorName {
+//        &self.name
+//    }
+//
+//    /// Returns the type tag of this MutableData
+//    pub fn tag(&self) -> u64 {
+//        self.tag
+//    }
+//
+//    /// Returns the current version of this MutableData
+//    pub fn version(&self) -> u64 {
+//        self.version
+//    }
+//
+//    /// Returns the owner keys
+//    pub fn owners(&self) -> &BTreeSet<PublicKey> {
+//        &self.owners
+//    }
+//
+//    /// Returns a value by the given key
+//    pub fn get(&self, key: &[u8]) -> Option<&Value> {
+//        self.data.get(key)
+//    }
+//
+//    /// Returns keys of all entries
+//    pub fn keys(&self) -> BTreeSet<&Vec<u8>> {
+//        self.data.keys().collect()
+//    }
+//
+//    /// Returns values of all entries
+//    pub fn values(&self) -> Vec<&Value> {
+//        self.data.values().collect()
+//    }
+//
+//    /// Returns all entries
+//    pub fn entries(&self) -> &BTreeMap<Vec<u8>, Value> {
+//        &self.data
+//    }
+//
+//    /// Removes and returns all entries
+//    pub fn take_entries(&mut self) -> BTreeMap<Vec<u8>, Value> {
+//        mem::replace(&mut self.data, BTreeMap::new())
+//    }
+//
+//    /// Mutates entries (key + value pairs) in bulk
+//    pub fn mutate_entries(
+//        &mut self,
+//        actions: BTreeMap<Vec<u8>, EntryAction>,
+//        requester: PublicKey,
+//    ) -> Result<(), ClientError> {
+//        // Deconstruct actions into inserts, updates, and deletes
+//        let (insert, update, delete) = actions.into_iter().fold(
+//            (BTreeMap::new(), BTreeMap::new(), BTreeMap::new()),
+//            |(mut insert, mut update, mut delete), (key, item)| {
+//                match item {
+//                    EntryAction::Ins(value) => {
+//                        let _ = insert.insert(key, value);
+//                    }
+//                    EntryAction::Update(value) => {
+//                        let _ = update.insert(key, value);
+//                    }
+//                    EntryAction::Del(version) => {
+//                        let _ = delete.insert(key, version);
+//                    }
+//                };
+//                (insert, update, delete)
+//            },
+//        );
+//
+//        if (!insert.is_empty() && !self.is_action_allowed(requester, Action::Insert))
+//            || (!update.is_empty() && !self.is_action_allowed(requester, Action::Update))
+//            || (!delete.is_empty() && !self.is_action_allowed(requester, Action::Delete))
+//        {
+//            return Err(ClientError::AccessDenied);
+//        }
+//
+//        let mut new_data = self.data.clone();
+//        let mut errors = BTreeMap::new();
+//
+//        for (key, val) in insert {
+//            match new_data.entry(key) {
+//                Entry::Occupied(entry) => {
+//                    let _ = errors.insert(
+//                        entry.key().clone(),
+//                        EntryError::EntryExists(entry.get().entry_version),
+//                    );
+//                }
+//                Entry::Vacant(entry) => {
+//                    let _ = entry.insert(val);
+//                }
+//            }
+//        }
+//
+//        for (key, val) in update {
+//            match new_data.entry(key) {
+//                Entry::Occupied(mut entry) => {
+//                    let current_version = entry.get().entry_version;
+//                    if val.entry_version == current_version + 1 {
+//                        let _ = entry.insert(val);
+//                    } else {
+//                        let _ = errors.insert(
+//                            entry.key().clone(),
+//                            EntryError::InvalidSuccessor(current_version),
+//                        );
+//                    }
+//                }
+//                Entry::Vacant(entry) => {
+//                    let _ = errors.insert(entry.key().clone(), EntryError::NoSuchEntry);
+//                }
+//            }
+//        }
+//
+//        for (key, version) in delete {
+//            // TODO(nbaksalyar): find a way to decrease a number of entries after deletion.
+//            // In the current implementation if a number of entries exceeds the limit
+//            // there's no way for an owner to delete unneeded entries.
+//            match new_data.entry(key) {
+//                Entry::Occupied(mut entry) => {
+//                    let current_version = entry.get().entry_version;
+//                    if version == current_version + 1 {
+//                        let _ = entry.insert(Value {
+//                            content: Vec::new(),
+//                            entry_version: version,
+//                        });
+//                    } else {
+//                        let _ = errors.insert(
+//                            entry.key().clone(),
+//                            EntryError::InvalidSuccessor(current_version),
+//                        );
+//                    }
+//                }
+//                Entry::Vacant(entry) => {
+//                    let _ = errors.insert(entry.key().clone(), EntryError::NoSuchEntry);
+//                }
+//            }
+//        }
+//
+//        if !errors.is_empty() {
+//            return Err(ClientError::InvalidEntryActions(errors));
+//        }
+//
+//        if new_data.len() > MAX_MUTABLE_DATA_ENTRIES as usize {
+//            return Err(ClientError::TooManyEntries);
+//        }
+//
+//        let old_data = mem::replace(&mut self.data, new_data);
+//
+//        if !self.validate_size() {
+//            self.data = old_data;
+//            return Err(ClientError::DataTooLarge);
+//        }
+//
+//        Ok(())
+//    }
+//
+//    /// Mutates entries without performing any validation.
+//    ///
+//    /// For updates and deletes, the mutation is performed only if he entry version
+//    /// of the action is higher than the current version of the entry.
+//    pub fn mutate_entries_without_validation(&mut self, actions: BTreeMap<Vec<u8>, EntryAction>) {
+//        for (key, action) in actions {
+//            match action {
+//                EntryAction::Ins(new_value) => {
+//                    let _ = self.data.insert(key, new_value);
+//                }
+//                EntryAction::Update(new_value) => match self.data.entry(key) {
+//                    Entry::Occupied(mut entry) => {
+//                        if new_value.entry_version > entry.get().entry_version {
+//                            let _ = entry.insert(new_value);
+//                        }
+//                    }
+//                    Entry::Vacant(entry) => {
+//                        let _ = entry.insert(new_value);
+//                    }
+//                },
+//                EntryAction::Del(new_version) => {
+//                    if let Entry::Occupied(mut entry) = self.data.entry(key) {
+//                        if new_version > entry.get().entry_version {
+//                            let _ = entry.insert(Value {
+//                                content: Vec::new(),
+//                                entry_version: new_version,
+//                            });
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//    }
+//
+//    /// Mutates single entry without performing any validations, except the version
+//    /// check (new version must be higher than the existing one).
+//    /// If the entry doesn't exist yet, inserts it, otherwise, updates it.
+//    /// Returns true if the version check passed and the entry was mutated,
+//    /// false otherwise.
+//    pub fn mutate_entry_without_validation(&mut self, key: Vec<u8>, value: Value) -> bool {
+//        match self.data.entry(key) {
+//            Entry::Occupied(mut entry) => {
+//                if value.entry_version > entry.get().entry_version {
+//                    let _ = entry.insert(value);
+//                    true
+//                } else {
+//                    false
+//                }
+//            }
+//            Entry::Vacant(entry) => {
+//                let _ = entry.insert(value);
+//                true
+//            }
+//        }
+//    }
+//
+//    /// Gets a complete list of permissions
+//    pub fn permissions(&self) -> &BTreeMap<User, PermissionSet> {
+//        &self.permissions
+//    }
+//
+//    /// Gets a list of permissions for the provided user.
+//    pub fn user_permissions(&self, user: &User) -> Result<&PermissionSet, ClientError> {
+//        self.permissions.get(user).ok_or(ClientError::NoSuchKey)
+//    }
+//
+//    /// Insert or update permissions for the provided user.
+//    pub fn set_user_permissions(
+//        &mut self,
+//        user: User,
+//        permissions: PermissionSet,
+//        version: u64,
+//        requester: PublicKey,
+//    ) -> Result<(), ClientError> {
+//        if !self.is_action_allowed(requester, Action::ManagePermissions) {
+//            return Err(ClientError::AccessDenied);
+//        }
+//        if version != self.version + 1 {
+//            return Err(ClientError::InvalidSuccessor(self.version));
+//        }
+//        let prev = self.permissions.insert(user, permissions);
+//        if !self.validate_size() {
+//            // Serialised data size limit is exceeded
+//            let _ = match prev {
+//                None => self.permissions.remove(&user),
+//                Some(perms) => self.permissions.insert(user, perms),
+//            };
+//            return Err(ClientError::DataTooLarge);
+//        }
+//        self.version = version;
+//        Ok(())
+//    }
+//
+//    /// Set user permission without performing any validation.
+//    pub fn set_user_permissions_without_validation(
+//        &mut self,
+//        user: User,
+//        permissions: PermissionSet,
+//        version: u64,
+//    ) -> bool {
+//        if version <= self.version {
+//            return false;
+//        }
+//
+//        let _ = self.permissions.insert(user, permissions);
+//        self.version = version;
+//        true
+//    }
+//
+//    /// Delete permissions for the provided user.
+//    pub fn del_user_permissions(
+//        &mut self,
+//        user: &User,
+//        version: u64,
+//        requester: PublicKey,
+//    ) -> Result<(), ClientError> {
+//        if !self.is_action_allowed(requester, Action::ManagePermissions) {
+//            return Err(ClientError::AccessDenied);
+//        }
+//        if version != self.version + 1 {
+//            return Err(ClientError::InvalidSuccessor(self.version));
+//        }
+//        if !self.permissions.contains_key(user) {
+//            return Err(ClientError::NoSuchKey);
+//        }
+//        let _ = self.permissions.remove(user);
+//        self.version = version;
+//        Ok(())
+//    }
+//
+//    /// Delete user permissions without performing any validation.
+//    pub fn del_user_permissions_without_validation(&mut self, user: &User, version: u64) -> bool {
+//        if version <= self.version {
+//            return false;
+//        }
+//
+//        let _ = self.permissions.remove(user);
+//        self.version = version;
+//        true
+//    }
+//
+//    /// Change owner of the mutable data.
+//    pub fn change_owner(&mut self, new_owner: PublicKey, version: u64) -> Result<(), ClientError> {
+//        if version != self.version + 1 {
+//            return Err(ClientError::InvalidSuccessor(self.version));
+//        }
+//        self.owners.clear();
+//        let _ = self.owners.insert(new_owner);
+//        self.version = version;
+//        Ok(())
+//    }
+//
+//    /// Change the owner without performing any validation.
+//    pub fn change_owner_without_validation(&mut self, new_owner: PublicKey, version: u64) -> bool {
+//        if version <= self.version {
+//            return false;
+//        }
+//
+//        self.owners.clear();
+//        let _ = self.owners.insert(new_owner);
+//        self.version = version;
+//        true
+//    }
+//
+//    /// Return the size of this data after serialisation.
+//    pub fn serialised_size(&self) -> u64 {
+//        serialisation::serialised_size(self)
+//    }
+//
+//    /// Return true if the size is valid
+//    pub fn validate_size(&self) -> bool {
+//        self.serialised_size() <= MAX_MUTABLE_DATA_SIZE_IN_BYTES
+//    }
+//
+//    fn check_anyone_permissions(&self, action: Action) -> bool {
+//        match self.permissions.get(&User::Anyone) {
+//            None => false,
+//            Some(perms) => perms.is_allowed(action).unwrap_or(false),
+//        }
+//    }
+//
+//    fn is_action_allowed(&self, requester: PublicKey, action: Action) -> bool {
+//        if self.owners.contains(&requester) {
+//            return true;
+//        }
+//        match self.permissions.get(&User::Key(requester)) {
+//            Some(perms) => perms
+//                .is_allowed(action)
+//                .unwrap_or_else(|| self.check_anyone_permissions(action)),
+//            None => self.check_anyone_permissions(action),
+//        }
+//    }
+//}
 
-/// Helper struct to build entry actions on `MutableData`
-#[derive(Debug, Default, Clone)]
-pub struct EntryActions {
-    pub actions: BTreeMap<Vec<u8>, EntryAction>,
-}
-
-impl EntryActions {
-    /// Create a helper to simplify construction of `MutableData` actions
-    pub fn new() -> Self {
-        Default::default()
-    }
-
-    /// Insert a new key-value pair
-    pub fn ins(mut self, key: Vec<u8>, content: Vec<u8>, version: u64) -> Self {
-        let _ = self.actions.insert(
-            key,
-            EntryAction::Ins(Value {
-                entry_version: version,
-                content,
-            }),
-        );
-        self
-    }
-
-    /// Update existing key-value pair
-    pub fn update(mut self, key: Vec<u8>, content: Vec<u8>, version: u64) -> Self {
-        let _ = self.actions.insert(
-            key,
-            EntryAction::Update(Value {
-                entry_version: version,
-                content,
-            }),
-        );
-        self
-    }
-
-    /// Delete existing key
-    pub fn del(mut self, key: Vec<u8>, version: u64) -> Self {
-        let _ = self.actions.insert(key, EntryAction::Del(version));
-        self
-    }
-}
-
-impl Into<BTreeMap<Vec<u8>, EntryAction>> for EntryActions {
-    fn into(self) -> BTreeMap<Vec<u8>, EntryAction> {
-        self.actions
-    }
-}
-
-impl Into<MDataSeqEntryActions> for EntryActions {
-    fn into(self) -> MDataSeqEntryActions {
-        self.actions.into_iter().fold(
-            MDataSeqEntryActions::new(),
-            |new_actions, (key, old_action)| match old_action {
-                EntryAction::Ins(value) => new_actions.ins(key, value.content, value.entry_version),
-                EntryAction::Update(value) => {
-                    new_actions.update(key, value.content, value.entry_version)
-                }
-                EntryAction::Del(version) => new_actions.del(key, version),
-            },
-        )
-    }
-}
-
-impl MutableData {
-    /// Creates a new MutableData
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(
-        name: XorName,
-        tag: u64,
-        permissions: BTreeMap<User, PermissionSet>,
-        data: BTreeMap<Vec<u8>, Value>,
-        owners: BTreeSet<PublicKey>,
-    ) -> Result<MutableData, ClientError> {
-        let md = MutableData {
-            name,
-            tag,
-            data,
-            permissions,
-            version: 0,
-            owners,
-        };
-
-        md.validate()?;
-        Ok(md)
-    }
-
-    /// Validate this data.
-    pub fn validate(&self) -> Result<(), ClientError> {
-        if self.owners.len() > 1 {
-            return Err(ClientError::InvalidOwners);
-        }
-        if self.data.len() >= (MAX_MUTABLE_DATA_ENTRIES + 1) as usize {
-            return Err(ClientError::TooManyEntries);
-        }
-
-        if self.serialised_size() > MAX_MUTABLE_DATA_SIZE_IN_BYTES {
-            return Err(ClientError::DataTooLarge);
-        }
-
-        Ok(())
-    }
-
-    /// Returns the shell of this data. Shell contains the same fields as the data itself,
-    /// except the entries.
-    pub fn shell(&self) -> MutableData {
-        MutableData {
-            name: self.name,
-            tag: self.tag,
-            data: BTreeMap::new(),
-            permissions: self.permissions.clone(),
-            version: self.version,
-            owners: self.owners.clone(),
-        }
-    }
-
-    /// Returns the name.
-    pub fn name(&self) -> &XorName {
-        &self.name
-    }
-
-    /// Returns the type tag of this MutableData
-    pub fn tag(&self) -> u64 {
-        self.tag
-    }
-
-    /// Returns the current version of this MutableData
-    pub fn version(&self) -> u64 {
-        self.version
-    }
-
-    /// Returns the owner keys
-    pub fn owners(&self) -> &BTreeSet<PublicKey> {
-        &self.owners
-    }
-
-    /// Returns a value by the given key
-    pub fn get(&self, key: &[u8]) -> Option<&Value> {
-        self.data.get(key)
-    }
-
-    /// Returns keys of all entries
-    pub fn keys(&self) -> BTreeSet<&Vec<u8>> {
-        self.data.keys().collect()
-    }
-
-    /// Returns values of all entries
-    pub fn values(&self) -> Vec<&Value> {
-        self.data.values().collect()
-    }
-
-    /// Returns all entries
-    pub fn entries(&self) -> &BTreeMap<Vec<u8>, Value> {
-        &self.data
-    }
-
-    /// Removes and returns all entries
-    pub fn take_entries(&mut self) -> BTreeMap<Vec<u8>, Value> {
-        mem::replace(&mut self.data, BTreeMap::new())
-    }
-
-    /// Mutates entries (key + value pairs) in bulk
-    pub fn mutate_entries(
-        &mut self,
-        actions: BTreeMap<Vec<u8>, EntryAction>,
-        requester: PublicKey,
-    ) -> Result<(), ClientError> {
-        // Deconstruct actions into inserts, updates, and deletes
-        let (insert, update, delete) = actions.into_iter().fold(
-            (BTreeMap::new(), BTreeMap::new(), BTreeMap::new()),
-            |(mut insert, mut update, mut delete), (key, item)| {
-                match item {
-                    EntryAction::Ins(value) => {
-                        let _ = insert.insert(key, value);
-                    }
-                    EntryAction::Update(value) => {
-                        let _ = update.insert(key, value);
-                    }
-                    EntryAction::Del(version) => {
-                        let _ = delete.insert(key, version);
-                    }
-                };
-                (insert, update, delete)
-            },
-        );
-
-        if (!insert.is_empty() && !self.is_action_allowed(requester, Action::Insert))
-            || (!update.is_empty() && !self.is_action_allowed(requester, Action::Update))
-            || (!delete.is_empty() && !self.is_action_allowed(requester, Action::Delete))
-        {
-            return Err(ClientError::AccessDenied);
-        }
-
-        let mut new_data = self.data.clone();
-        let mut errors = BTreeMap::new();
-
-        for (key, val) in insert {
-            match new_data.entry(key) {
-                Entry::Occupied(entry) => {
-                    let _ = errors.insert(
-                        entry.key().clone(),
-                        EntryError::EntryExists(entry.get().entry_version),
-                    );
-                }
-                Entry::Vacant(entry) => {
-                    let _ = entry.insert(val);
-                }
-            }
-        }
-
-        for (key, val) in update {
-            match new_data.entry(key) {
-                Entry::Occupied(mut entry) => {
-                    let current_version = entry.get().entry_version;
-                    if val.entry_version == current_version + 1 {
-                        let _ = entry.insert(val);
-                    } else {
-                        let _ = errors.insert(
-                            entry.key().clone(),
-                            EntryError::InvalidSuccessor(current_version),
-                        );
-                    }
-                }
-                Entry::Vacant(entry) => {
-                    let _ = errors.insert(entry.key().clone(), EntryError::NoSuchEntry);
-                }
-            }
-        }
-
-        for (key, version) in delete {
-            // TODO(nbaksalyar): find a way to decrease a number of entries after deletion.
-            // In the current implementation if a number of entries exceeds the limit
-            // there's no way for an owner to delete unneeded entries.
-            match new_data.entry(key) {
-                Entry::Occupied(mut entry) => {
-                    let current_version = entry.get().entry_version;
-                    if version == current_version + 1 {
-                        let _ = entry.insert(Value {
-                            content: Vec::new(),
-                            entry_version: version,
-                        });
-                    } else {
-                        let _ = errors.insert(
-                            entry.key().clone(),
-                            EntryError::InvalidSuccessor(current_version),
-                        );
-                    }
-                }
-                Entry::Vacant(entry) => {
-                    let _ = errors.insert(entry.key().clone(), EntryError::NoSuchEntry);
-                }
-            }
-        }
-
-        if !errors.is_empty() {
-            return Err(ClientError::InvalidEntryActions(errors));
-        }
-
-        if new_data.len() > MAX_MUTABLE_DATA_ENTRIES as usize {
-            return Err(ClientError::TooManyEntries);
-        }
-
-        let old_data = mem::replace(&mut self.data, new_data);
-
-        if !self.validate_size() {
-            self.data = old_data;
-            return Err(ClientError::DataTooLarge);
-        }
-
-        Ok(())
-    }
-
-    /// Mutates entries without performing any validation.
-    ///
-    /// For updates and deletes, the mutation is performed only if he entry version
-    /// of the action is higher than the current version of the entry.
-    pub fn mutate_entries_without_validation(&mut self, actions: BTreeMap<Vec<u8>, EntryAction>) {
-        for (key, action) in actions {
-            match action {
-                EntryAction::Ins(new_value) => {
-                    let _ = self.data.insert(key, new_value);
-                }
-                EntryAction::Update(new_value) => match self.data.entry(key) {
-                    Entry::Occupied(mut entry) => {
-                        if new_value.entry_version > entry.get().entry_version {
-                            let _ = entry.insert(new_value);
-                        }
-                    }
-                    Entry::Vacant(entry) => {
-                        let _ = entry.insert(new_value);
-                    }
-                },
-                EntryAction::Del(new_version) => {
-                    if let Entry::Occupied(mut entry) = self.data.entry(key) {
-                        if new_version > entry.get().entry_version {
-                            let _ = entry.insert(Value {
-                                content: Vec::new(),
-                                entry_version: new_version,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// Mutates single entry without performing any validations, except the version
-    /// check (new version must be higher than the existing one).
-    /// If the entry doesn't exist yet, inserts it, otherwise, updates it.
-    /// Returns true if the version check passed and the entry was mutated,
-    /// false otherwise.
-    pub fn mutate_entry_without_validation(&mut self, key: Vec<u8>, value: Value) -> bool {
-        match self.data.entry(key) {
-            Entry::Occupied(mut entry) => {
-                if value.entry_version > entry.get().entry_version {
-                    let _ = entry.insert(value);
-                    true
-                } else {
-                    false
-                }
-            }
-            Entry::Vacant(entry) => {
-                let _ = entry.insert(value);
-                true
-            }
-        }
-    }
-
-    /// Gets a complete list of permissions
-    pub fn permissions(&self) -> &BTreeMap<User, PermissionSet> {
-        &self.permissions
-    }
-
-    /// Gets a list of permissions for the provided user.
-    pub fn user_permissions(&self, user: &User) -> Result<&PermissionSet, ClientError> {
-        self.permissions.get(user).ok_or(ClientError::NoSuchKey)
-    }
-
-    /// Insert or update permissions for the provided user.
-    pub fn set_user_permissions(
-        &mut self,
-        user: User,
-        permissions: PermissionSet,
-        version: u64,
-        requester: PublicKey,
-    ) -> Result<(), ClientError> {
-        if !self.is_action_allowed(requester, Action::ManagePermissions) {
-            return Err(ClientError::AccessDenied);
-        }
-        if version != self.version + 1 {
-            return Err(ClientError::InvalidSuccessor(self.version));
-        }
-        let prev = self.permissions.insert(user, permissions);
-        if !self.validate_size() {
-            // Serialised data size limit is exceeded
-            let _ = match prev {
-                None => self.permissions.remove(&user),
-                Some(perms) => self.permissions.insert(user, perms),
-            };
-            return Err(ClientError::DataTooLarge);
-        }
-        self.version = version;
-        Ok(())
-    }
-
-    /// Set user permission without performing any validation.
-    pub fn set_user_permissions_without_validation(
-        &mut self,
-        user: User,
-        permissions: PermissionSet,
-        version: u64,
-    ) -> bool {
-        if version <= self.version {
-            return false;
-        }
-
-        let _ = self.permissions.insert(user, permissions);
-        self.version = version;
-        true
-    }
-
-    /// Delete permissions for the provided user.
-    pub fn del_user_permissions(
-        &mut self,
-        user: &User,
-        version: u64,
-        requester: PublicKey,
-    ) -> Result<(), ClientError> {
-        if !self.is_action_allowed(requester, Action::ManagePermissions) {
-            return Err(ClientError::AccessDenied);
-        }
-        if version != self.version + 1 {
-            return Err(ClientError::InvalidSuccessor(self.version));
-        }
-        if !self.permissions.contains_key(user) {
-            return Err(ClientError::NoSuchKey);
-        }
-        let _ = self.permissions.remove(user);
-        self.version = version;
-        Ok(())
-    }
-
-    /// Delete user permissions without performing any validation.
-    pub fn del_user_permissions_without_validation(&mut self, user: &User, version: u64) -> bool {
-        if version <= self.version {
-            return false;
-        }
-
-        let _ = self.permissions.remove(user);
-        self.version = version;
-        true
-    }
-
-    /// Change owner of the mutable data.
-    pub fn change_owner(&mut self, new_owner: PublicKey, version: u64) -> Result<(), ClientError> {
-        if version != self.version + 1 {
-            return Err(ClientError::InvalidSuccessor(self.version));
-        }
-        self.owners.clear();
-        let _ = self.owners.insert(new_owner);
-        self.version = version;
-        Ok(())
-    }
-
-    /// Change the owner without performing any validation.
-    pub fn change_owner_without_validation(&mut self, new_owner: PublicKey, version: u64) -> bool {
-        if version <= self.version {
-            return false;
-        }
-
-        self.owners.clear();
-        let _ = self.owners.insert(new_owner);
-        self.version = version;
-        true
-    }
-
-    /// Return the size of this data after serialisation.
-    pub fn serialised_size(&self) -> u64 {
-        serialisation::serialised_size(self)
-    }
-
-    /// Return true if the size is valid
-    pub fn validate_size(&self) -> bool {
-        self.serialised_size() <= MAX_MUTABLE_DATA_SIZE_IN_BYTES
-    }
-
-    fn check_anyone_permissions(&self, action: Action) -> bool {
-        match self.permissions.get(&User::Anyone) {
-            None => false,
-            Some(perms) => perms.is_allowed(action).unwrap_or(false),
-        }
-    }
-
-    fn is_action_allowed(&self, requester: PublicKey, action: Action) -> bool {
-        if self.owners.contains(&requester) {
-            return true;
-        }
-        match self.permissions.get(&User::Key(requester)) {
-            Some(perms) => perms
-                .is_allowed(action)
-                .unwrap_or_else(|| self.check_anyone_permissions(action)),
-            None => self.check_anyone_permissions(action),
-        }
-    }
-}
-
-impl Debug for MutableData {
-    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
-        // TODO(nbaksalyar): write all other fields
-        write!(
-            formatter,
-            "MutableData {{ name: {}, tag: {}, version: {}, owners: {:?} }}",
-            self.name(),
-            self.tag,
-            self.version,
-            self.owners
-        )
-    }
-}
+//impl Debug for MutableData {
+//    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
+//        // TODO(nbaksalyar): write all other fields
+//        write!(
+//            formatter,
+//            "MutableData {{ name: {}, tag: {}, version: {}, owners: {:?} }}",
+//            self.name(),
+//            self.tag,
+//            self.version,
+//            self.owners
+//        )
+//    }
+//}
 
 /// Request message types
 #[allow(clippy::large_enum_variant)]
@@ -1002,170 +995,170 @@ pub enum Request {
     },
 
     // --- MutableData ---
-    /// Fetches whole MutableData from the network.
-    /// Note: responses to this request are unlikely to accumulate during churn.
-    GetMData {
-        /// Network identifier of MutableData
-        name: XorName,
-        /// Type tag
-        tag: u64,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
+    // Fetches whole MutableData from the network.
+    // Note: responses to this request are unlikely to accumulate during churn.
+//    GetMData {
+//        /// Network identifier of MutableData
+//        name: XorName,
+//        /// Type tag
+//        tag: u64,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
     // ==========================
-    /// Creates a new MutableData in the network.
-    PutMData {
-        /// MutableData to be stored
-        data: MutableData,
-        /// Unique message identifier
-        msg_id: MsgId,
-        /// Requester public key
-        requester: PublicKey,
-    },
-    /// Fetches a latest version number.
-    GetMDataVersion {
-        /// Network identifier of MutableData
-        name: XorName,
-        /// Type tag
-        tag: u64,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-    /// Fetches the shell (everthing except the entries).
-    GetMDataShell {
-        /// Network identifier of MutableData
-        name: XorName,
-        /// Type tag
-        tag: u64,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-
-    // Data Actions
-    /// Fetches a list of entries (keys + values).
-    /// Note: responses to this request are unlikely to accumulate during churn.
-    ListMDataEntries {
-        /// Network identifier of MutableData
-        name: XorName,
-        /// Type tag
-        tag: u64,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-    /// Fetches a list of keys in MutableData.
-    /// Note: responses to this request are unlikely to accumulate during churn.
-    ListMDataKeys {
-        /// Network identifier of MutableData
-        name: XorName,
-        /// Type tag
-        tag: u64,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-    /// Fetches a list of values in MutableData.
-    /// Note: responses to this request are unlikely to accumulate during churn.
-    ListMDataValues {
-        /// Network identifier of MutableData
-        name: XorName,
-        /// Type tag
-        tag: u64,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-    /// Fetches a single value from MutableData
-    GetMDataValue {
-        /// Network identifier of MutableData
-        name: XorName,
-        /// Type tag
-        tag: u64,
-        /// Key of an entry to be fetched
-        key: Vec<u8>,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-    /// Updates MutableData entries in bulk.
-    MutateMDataEntries {
-        /// Network identifier of MutableData
-        name: XorName,
-        /// Type tag
-        tag: u64,
-        /// A list of mutations (inserts, updates, or deletes) to be performed
-        /// on MutableData in bulk.
-        actions: BTreeMap<Vec<u8>, EntryAction>,
-        /// Unique message identifier
-        msg_id: MsgId,
-        /// Requester public key
-        requester: PublicKey,
-    },
-
-    // Permission Actions
-    /// Fetches a complete list of permissions.
-    ListMDataPermissions {
-        /// Network identifier of MutableData
-        name: XorName,
-        /// Type tag
-        tag: u64,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-    /// Fetches a list of permissions for a particular User.
-    ListMDataUserPermissions {
-        /// Network identifier of MutableData
-        name: XorName,
-        /// Type tag
-        tag: u64,
-        /// A user identifier used to fetch permissions
-        user: User,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-    /// Updates or inserts a list of permissions for a particular User in the given MutableData.
-    SetMDataUserPermissions {
-        /// Network identifier of MutableData
-        name: XorName,
-        /// Type tag
-        tag: u64,
-        /// A user identifier used to set permissions
-        user: User,
-        /// Permissions to be set for a user
-        permissions: PermissionSet,
-        /// Incremented version of MutableData
-        version: u64,
-        /// Unique message identifier
-        msg_id: MsgId,
-        /// Requester public key
-        requester: PublicKey,
-    },
-    /// Deletes a list of permissions for a particular User in the given MutableData.
-    DelMDataUserPermissions {
-        /// Network identifier of MutableData
-        name: XorName,
-        /// Type tag
-        tag: u64,
-        /// A user identifier used to delete permissions
-        user: User,
-        /// Incremented version of MutableData
-        version: u64,
-        /// Unique message identifier
-        msg_id: MsgId,
-        /// Requester public key
-        requester: PublicKey,
-    },
-
-    // Ownership Actions
-    /// Changes an owner of the given MutableData. Only the current owner can perform this action.
-    ChangeMDataOwner {
-        /// Network identifier of MutableData
-        name: XorName,
-        /// Type tag
-        tag: u64,
-        /// A list of new owners
-        new_owners: BTreeSet<PublicKey>,
-        /// Incremented version of MutableData
-        version: u64,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
+//    Creates a new MutableData in the network.
+//    PutMData {
+//        /// MutableData to be stored
+//        data: MutableData,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//        /// Requester public key
+//        requester: PublicKey,
+//    },
+//    Fetches a latest version number.
+//    GetMDataVersion {
+//        /// Network identifier of MutableData
+//        name: XorName,
+//        /// Type tag
+//        tag: u64,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//    /// Fetches the shell (everthing except the entries).
+//    GetMDataShell {
+//        /// Network identifier of MutableData
+//        name: XorName,
+//        /// Type tag
+//        tag: u64,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//
+//    // Data Actions
+//    /// Fetches a list of entries (keys + values).
+//    /// Note: responses to this request are unlikely to accumulate during churn.
+//    ListMDataEntries {
+//        /// Network identifier of MutableData
+//        name: XorName,
+//        /// Type tag
+//        tag: u64,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//    /// Fetches a list of keys in MutableData.
+//    /// Note: responses to this request are unlikely to accumulate during churn.
+//    ListMDataKeys {
+//        /// Network identifier of MutableData
+//        name: XorName,
+//        /// Type tag
+//        tag: u64,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//    /// Fetches a list of values in MutableData.
+//    /// Note: responses to this request are unlikely to accumulate during churn.
+//    ListMDataValues {
+//        /// Network identifier of MutableData
+//        name: XorName,
+//        /// Type tag
+//        tag: u64,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//    /// Fetches a single value from MutableData
+//    GetMDataValue {
+//        /// Network identifier of MutableData
+//        name: XorName,
+//        /// Type tag
+//        tag: u64,
+//        /// Key of an entry to be fetched
+//        key: Vec<u8>,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//    /// Updates MutableData entries in bulk.
+//    MutateMDataEntries {
+//        /// Network identifier of MutableData
+//        name: XorName,
+//        /// Type tag
+//        tag: u64,
+//        /// A list of mutations (inserts, updates, or deletes) to be performed
+//        /// on MutableData in bulk.
+//        actions: BTreeMap<Vec<u8>, EntryAction>,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//        /// Requester public key
+//        requester: PublicKey,
+//    },
+//
+//    // Permission Actions
+//    /// Fetches a complete list of permissions.
+//    ListMDataPermissions {
+//        /// Network identifier of MutableData
+//        name: XorName,
+//        /// Type tag
+//        tag: u64,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//    /// Fetches a list of permissions for a particular User.
+//    ListMDataUserPermissions {
+//        /// Network identifier of MutableData
+//        name: XorName,
+//        /// Type tag
+//        tag: u64,
+//        /// A user identifier used to fetch permissions
+//        user: User,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//    /// Updates or inserts a list of permissions for a particular User in the given MutableData.
+//    SetMDataUserPermissions {
+//        /// Network identifier of MutableData
+//        name: XorName,
+//        /// Type tag
+//        tag: u64,
+//        /// A user identifier used to set permissions
+//        user: User,
+//        /// Permissions to be set for a user
+//        permissions: PermissionSet,
+//        /// Incremented version of MutableData
+//        version: u64,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//        /// Requester public key
+//        requester: PublicKey,
+//    },
+//    /// Deletes a list of permissions for a particular User in the given MutableData.
+//    DelMDataUserPermissions {
+//        /// Network identifier of MutableData
+//        name: XorName,
+//        /// Type tag
+//        tag: u64,
+//        /// A user identifier used to delete permissions
+//        user: User,
+//        /// Incremented version of MutableData
+//        version: u64,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//        /// Requester public key
+//        requester: PublicKey,
+//    },
+//
+//    // Ownership Actions
+//    /// Changes an owner of the given MutableData. Only the current owner can perform this action.
+//    ChangeMDataOwner {
+//        /// Network identifier of MutableData
+//        name: XorName,
+//        /// Type tag
+//        tag: u64,
+//        /// A list of new owners
+//        new_owners: BTreeSet<PublicKey>,
+//        /// Incremented version of MutableData
+//        version: u64,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
 }
 
 impl Request {
@@ -1176,21 +1169,7 @@ impl Request {
             Refresh(_, ref msg_id)
             | GetAccountInfo(ref msg_id)
             | PutIData { ref msg_id, .. }
-            | GetIData { ref msg_id, .. }
-            | GetMData { ref msg_id, .. }
-            | PutMData { ref msg_id, .. }
-            | GetMDataVersion { ref msg_id, .. }
-            | GetMDataShell { ref msg_id, .. }
-            | ListMDataEntries { ref msg_id, .. }
-            | ListMDataKeys { ref msg_id, .. }
-            | ListMDataValues { ref msg_id, .. }
-            | GetMDataValue { ref msg_id, .. }
-            | MutateMDataEntries { ref msg_id, .. }
-            | ListMDataPermissions { ref msg_id, .. }
-            | ListMDataUserPermissions { ref msg_id, .. }
-            | SetMDataUserPermissions { ref msg_id, .. }
-            | DelMDataUserPermissions { ref msg_id, .. }
-            | ChangeMDataOwner { ref msg_id, .. } => msg_id,
+            | GetIData { ref msg_id, .. } => msg_id,
         }
     }
 
@@ -1235,113 +1214,113 @@ pub enum Response {
     // --- MutableData ---
     // ==========================
     /// Returns a success or failure status of putting MutableData to the network.
-    PutMData {
-        /// Result of putting MutableData to the network.
-        res: Result<(), ClientError>,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-    /// Returns a result of fetching MutableData from the network.
-    GetMData {
-        /// Result of fetching MutableData from the network.
-        res: Result<MutableData, ClientError>,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-    /// Returns a current version of MutableData stored in the network.
-    GetMDataVersion {
-        /// Result of getting a version of MutableData
-        res: Result<u64, ClientError>,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-    /// Returns the shell of MutableData (everything except the entries).
-    GetMDataShell {
-        /// Result of getting the shell of MutableData.
-        res: Result<MutableData, ClientError>,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-
-    // Data Actions
-    /// Returns a complete list of entries in MutableData or an error in case of failure.
-    ListMDataEntries {
-        /// Result of getting a list of entries in MutableData
-        res: Result<BTreeMap<Vec<u8>, Value>, ClientError>,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-    /// Returns a list of keys in MutableData or an error in case of failure.
-    ListMDataKeys {
-        /// Result of getting a list of keys in MutableData
-        res: Result<BTreeSet<Vec<u8>>, ClientError>,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-    /// Returns a list of values in MutableData or an error in case of failure.
-    ListMDataValues {
-        /// Result of getting a list of values in MutableData
-        res: Result<Vec<Value>, ClientError>,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-    /// Returns a single entry from MutableData or an error in case of failure.
-    GetMDataValue {
-        /// Result of getting a value from MutableData
-        res: Result<Value, ClientError>,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-    /// Returns a success or failure status of mutating MutableData in the network.
-    MutateMDataEntries {
-        /// Result of mutating an entry in MutableData
-        res: Result<(), ClientError>,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-
-    // Permission Actions
-    /// Returns a complete list of MutableData permissions stored on the network
-    /// or an error in case of failure.
-    ListMDataPermissions {
-        /// Result of getting a list of permissions in MutableData
-        res: Result<BTreeMap<User, PermissionSet>, ClientError>,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-    /// Returns a list of permissions for a particular User in MutableData or an
-    /// error in case of failure.
-    ListMDataUserPermissions {
-        /// Result of getting a list of user permissions in MutableData
-        res: Result<PermissionSet, ClientError>,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-    /// Returns a success or failure status of setting permissions for a particular
-    /// User in MutableData.
-    SetMDataUserPermissions {
-        /// Result of setting a list of user permissions in MutableData
-        res: Result<(), ClientError>,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-    /// Returns a success or failure status of deleting permissions for a particular
-    /// User in MutableData.
-    DelMDataUserPermissions {
-        /// Result of deleting a list of user permissions in MutableData
-        res: Result<(), ClientError>,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
-
-    // Ownership Actions
-    /// Returns a success or failure status of chaning an owner of MutableData.
-    ChangeMDataOwner {
-        /// Result of chaning an owner of MutableData
-        res: Result<(), ClientError>,
-        /// Unique message identifier
-        msg_id: MsgId,
-    },
+//    PutMData {
+//        /// Result of putting MutableData to the network.
+//        res: Result<(), ClientError>,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//    /// Returns a result of fetching MutableData from the network.
+//    GetMData {
+//        /// Result of fetching MutableData from the network.
+//        res: Result<MutableData, ClientError>,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//    /// Returns a current version of MutableData stored in the network.
+//    GetMDataVersion {
+//        /// Result of getting a version of MutableData
+//        res: Result<u64, ClientError>,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//    /// Returns the shell of MutableData (everything except the entries).
+//    GetMDataShell {
+//        /// Result of getting the shell of MutableData.
+//        res: Result<MutableData, ClientError>,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//
+//    // Data Actions
+//    /// Returns a complete list of entries in MutableData or an error in case of failure.
+//    ListMDataEntries {
+//        /// Result of getting a list of entries in MutableData
+//        res: Result<BTreeMap<Vec<u8>, Value>, ClientError>,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//    /// Returns a list of keys in MutableData or an error in case of failure.
+//    ListMDataKeys {
+//        /// Result of getting a list of keys in MutableData
+//        res: Result<BTreeSet<Vec<u8>>, ClientError>,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//    /// Returns a list of values in MutableData or an error in case of failure.
+//    ListMDataValues {
+//        /// Result of getting a list of values in MutableData
+//        res: Result<Vec<Value>, ClientError>,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//    /// Returns a single entry from MutableData or an error in case of failure.
+//    GetMDataValue {
+//        /// Result of getting a value from MutableData
+//        res: Result<Value, ClientError>,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//    /// Returns a success or failure status of mutating MutableData in the network.
+//    MutateMDataEntries {
+//        /// Result of mutating an entry in MutableData
+//        res: Result<(), ClientError>,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//
+//    // Permission Actions
+//    /// Returns a complete list of MutableData permissions stored on the network
+//    /// or an error in case of failure.
+//    ListMDataPermissions {
+//        /// Result of getting a list of permissions in MutableData
+//        res: Result<BTreeMap<User, PermissionSet>, ClientError>,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//    /// Returns a list of permissions for a particular User in MutableData or an
+//    /// error in case of failure.
+//    ListMDataUserPermissions {
+//        /// Result of getting a list of user permissions in MutableData
+//        res: Result<PermissionSet, ClientError>,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//    /// Returns a success or failure status of setting permissions for a particular
+//    /// User in MutableData.
+//    SetMDataUserPermissions {
+//        /// Result of setting a list of user permissions in MutableData
+//        res: Result<(), ClientError>,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//    /// Returns a success or failure status of deleting permissions for a particular
+//    /// User in MutableData.
+//    DelMDataUserPermissions {
+//        /// Result of deleting a list of user permissions in MutableData
+//        res: Result<(), ClientError>,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
+//
+//    // Ownership Actions
+//    /// Returns a success or failure status of chaning an owner of MutableData.
+//    ChangeMDataOwner {
+//        /// Result of chaning an owner of MutableData
+//        res: Result<(), ClientError>,
+//        /// Unique message identifier
+//        msg_id: MsgId,
+//    },
 
     /// RpcResponse from Vaults - should be in safe-nd crate
     RpcResponse {
@@ -1357,8 +1336,6 @@ impl Response {
     pub fn priority(&self) -> u8 {
         match *self {
             Response::GetIData { res: Ok(_), .. } => 5,
-            Response::GetMDataValue { res: Ok(_), .. }
-            | Response::GetMDataShell { res: Ok(_), .. } => 4,
             _ => 3,
         }
     }
@@ -1370,20 +1347,6 @@ impl Response {
             GetAccountInfo { ref msg_id, .. }
             | PutIData { ref msg_id, .. }
             | GetIData { ref msg_id, .. }
-            | PutMData { ref msg_id, .. }
-            | GetMData { ref msg_id, .. }
-            | GetMDataVersion { ref msg_id, .. }
-            | GetMDataShell { ref msg_id, .. }
-            | ListMDataEntries { ref msg_id, .. }
-            | ListMDataKeys { ref msg_id, .. }
-            | ListMDataValues { ref msg_id, .. }
-            | GetMDataValue { ref msg_id, .. }
-            | MutateMDataEntries { ref msg_id, .. }
-            | ListMDataPermissions { ref msg_id, .. }
-            | ListMDataUserPermissions { ref msg_id, .. }
-            | SetMDataUserPermissions { ref msg_id, .. }
-            | DelMDataUserPermissions { ref msg_id, .. }
-            | ChangeMDataOwner { ref msg_id, .. }
             | RpcResponse { ref msg_id, .. } => msg_id,
         }
     }
@@ -1422,17 +1385,17 @@ pub const ACC_LOGIN_ENTRY_KEY: &[u8] = b"Login";
 /// with the contents of `account_ciphertext` as soon as possible to prevent an
 /// invitation code leak.
 #[derive(Serialize, Deserialize)]
-pub enum AccountPacket {
-    /// Account data with an invitation code that is used for registration.
-    WithInvitation {
-        /// Invitation code.
-        invitation_string: String,
-        /// Encrypted account data.
-        acc_pkt: Vec<u8>,
-    },
-    /// Encrypted account data.
-    AccPkt(Vec<u8>),
-}
+//pub enum AccountPacket {
+//    /// Account data with an invitation code that is used for registration.
+//    WithInvitation {
+//        /// Invitation code.
+//        invitation_string: String,
+//        /// Encrypted account data.
+//        acc_pkt: Vec<u8>,
+//    },
+//    /// Encrypted account data.
+//    AccPkt(Vec<u8>),
+//}
 
 /// The type of errors that can occur if routing is unable to handle a send request.
 #[derive(Debug)]
@@ -1576,7 +1539,7 @@ pub mod messaging {
             }
         }
 
-        fn cause(&self) -> Option<&StdError> {
+        fn cause(&self) -> Option<&dyn StdError> {
             None
         }
     }

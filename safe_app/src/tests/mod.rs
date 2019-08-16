@@ -117,30 +117,30 @@ pub fn login_registered_with_low_balance() {
                     res: Err(ClientError::LowBalance),
                     msg_id,
                 }),
-                Request::PutMData { msg_id, .. } => Some(Response::PutMData {
-                    res: Err(ClientError::LowBalance),
-                    msg_id,
-                }),
-                Request::MutateMDataEntries { msg_id, .. } => Some(Response::MutateMDataEntries {
-                    res: Err(ClientError::LowBalance),
-                    msg_id,
-                }),
-                Request::SetMDataUserPermissions { msg_id, .. } => {
-                    Some(Response::SetMDataUserPermissions {
-                        res: Err(ClientError::LowBalance),
-                        msg_id,
-                    })
-                }
-                Request::DelMDataUserPermissions { msg_id, .. } => {
-                    Some(Response::DelMDataUserPermissions {
-                        res: Err(ClientError::LowBalance),
-                        msg_id,
-                    })
-                }
-                Request::ChangeMDataOwner { msg_id, .. } => Some(Response::ChangeMDataOwner {
-                    res: Err(ClientError::LowBalance),
-                    msg_id,
-                }),
+//                Request::PutMData { msg_id, .. } => Some(Response::PutMData {
+//                    res: Err(ClientError::LowBalance),
+//                    msg_id,
+//                }),
+//                Request::MutateMDataEntries { msg_id, .. } => Some(Response::MutateMDataEntries {
+//                    res: Err(ClientError::LowBalance),
+//                    msg_id,
+//                }),
+//                Request::SetMDataUserPermissions { msg_id, .. } => {
+//                    Some(Response::SetMDataUserPermissions {
+//                        res: Err(ClientError::LowBalance),
+//                        msg_id,
+//                    })
+//                }
+//                Request::DelMDataUserPermissions { msg_id, .. } => {
+//                    Some(Response::DelMDataUserPermissions {
+//                        res: Err(ClientError::LowBalance),
+//                        msg_id,
+//                    })
+//                }
+//                Request::ChangeMDataOwner { msg_id, .. } => Some(Response::ChangeMDataOwner {
+//                    res: Err(ClientError::LowBalance),
+//                    msg_id,
+//                }),
                 // Request::InsAuthKey { msg_id, .. } => Some(Response::InsAuthKey {
                 //     res: Err(ClientError::LowBalance),
                 //     msg_id,
