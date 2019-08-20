@@ -623,7 +623,7 @@ mod tests {
     use safe_core::client::test_create_balance;
     use safe_core::utils::test_utils::{finish, random_client, setup_client};
     use safe_core::{utils, CoreError, DIR_TAG};
-    use safe_nd::{Coins, Error as SndError, MDataKind};
+    use safe_nd::{Coins, Error as SndError, IDataAddress, MDataKind};
     use std::str::FromStr;
     use tokio::runtime::current_thread::Runtime;
     use AuthMsgTx;
@@ -875,7 +875,7 @@ mod tests {
     #[test]
     fn timeout() {
         use crate::test_utils::random_client;
-        use safe_nd::{IDataAddress, PubImmutableData};
+        use safe_nd::PubImmutableData;
         use std::time::Duration;
 
         // Get
