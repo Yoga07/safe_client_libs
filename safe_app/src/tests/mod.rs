@@ -195,7 +195,9 @@ fn authorise_app(
         &AuthReq {
             app: app_info.clone(),
             app_container,
-            app_permissions: Default::default(),
+            app_permissions: AppPermissions {
+                transfer_coins: true
+            },
             containers: HashMap::new(),
         },
     ));
