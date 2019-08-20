@@ -875,7 +875,7 @@ mod tests {
     #[test]
     fn timeout() {
         use crate::test_utils::random_client;
-        use safe_nd::PubImmutableData;
+        use safe_nd::{IDataAddress, PubImmutableData};
         use std::time::Duration;
 
         // Get

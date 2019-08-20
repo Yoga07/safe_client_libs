@@ -8,7 +8,6 @@
 // Software.
 
 mod append_only_data;
-#[cfg(feature = "mock-network")]
 mod coins;
 mod unpublished_mutable_data;
 
