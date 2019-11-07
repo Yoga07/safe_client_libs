@@ -33,7 +33,6 @@
     bad_style,
     deprecated,
     improper_ctypes,
-    missing_docs,
     non_shorthand_field_patterns,
     overflowing_literals,
     plugin_as_library,
@@ -121,6 +120,7 @@ pub use self::event::{NetworkEvent, NetworkRx, NetworkTx};
 pub use self::event_loop::{CoreFuture, CoreMsg, CoreMsgRx, CoreMsgTx};
 pub use self::self_encryption_storage::{SelfEncryptionStorage, SelfEncryptionStorageError};
 pub use self::utils::FutureExt;
+pub use self::utils::logging;
 pub use quic_p2p::Config as QuicP2pConfig;
 
 /// All Maidsafe tagging should positive-offset from this.
