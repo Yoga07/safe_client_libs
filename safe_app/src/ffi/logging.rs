@@ -12,7 +12,8 @@
 use super::AppError;
 use config_file_handler::FileHandler;
 use ffi_utils::{catch_unwind_cb, from_c_str, FfiResult, FFI_RESULT_OK};
-use maidsafe_utilities::log;
+//use maidsafe_utilities::log;
+use safe_core::logging;
 use std::ffi::CString;
 use std::os::raw::{c_char, c_void};
 
@@ -27,10 +28,10 @@ pub unsafe extern "C" fn app_init_logging(
 ) {
     catch_unwind_cb(user_data, o_cb, || -> Result<(), AppError> {
         if output_file_name_override.is_null() {
-            log::init(false)?;
+            logging::init(false)?;
         } else {
             let output_file_name_override = from_c_str(output_file_name_override)?;
-            log::init_with_output_file(false, output_file_name_override)?;
+            logging::init_with_output_file(false, output_file_name_override)?;
         }
         o_cb(user_data, FFI_RESULT_OK);
         Ok(())

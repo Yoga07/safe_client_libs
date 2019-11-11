@@ -15,6 +15,9 @@ pub mod seed;
 #[cfg(any(test, feature = "testing"))]
 pub mod test_utils;
 
+/// Logging utilities
+pub mod logging;
+
 pub use self::futures::FutureExt;
 use crate::errors::CoreError;
 use bincode::{deserialize, serialize};

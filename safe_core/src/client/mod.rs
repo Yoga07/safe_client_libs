@@ -2828,6 +2828,9 @@ mod tests {
     // 4. Verify that the balance has not changed since deletions are free.
     #[test]
     pub fn deletions_should_be_free() {
+        use crate::logging::init_with_output_file;
+
+        unwrap!(init_with_output_file(false, None));
         let name = XorName(rand::random());
         let tag = 10;
         random_client(move |client| {

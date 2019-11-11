@@ -1,0 +1,46 @@
+TRACE 15:39:40.381781337 client::tests::deletions_should_be_free [safe_core::client::core_client #FS#safe_core/src/client/core_client.rs#FE#:76] Creating an account.
+TRACE 15:39:40.476414369 client::tests::deletions_should_be_free [safe_core::config_handler #FS#safe_core/src/config_handler.rs#FE#:167] Not available: safe_core/safe_core.config
+TRACE 15:39:40.476474656 client::tests::deletions_should_be_free [safe_core::config_handler #FS#safe_core/src/config_handler.rs#FE#:167] Not available: safe_vault/vault_connection_info.config
+TRACE 15:39:40.476484160 client::tests::deletions_should_be_free [safe_core::config_handler #FS#safe_core/src/config_handler.rs#FE#:167] Not available: safe_core/safe_core.config
+TRACE 15:39:40.476509341 client::tests::deletions_should_be_free [safe_core::config_handler #FS#safe_core/src/config_handler.rs#FE#:167] Not available: safe_vault/vault_connection_info.config
+TRACE 15:39:40.476518364 client::tests::deletions_should_be_free [safe_core::client::mock::vault #FS#safe_core/src/client/mock/vault.rs#FE#:88] Mock vault: using temporary file store
+TRACE 15:39:40.560008125 client::tests::deletions_should_be_free [safe_core::client::mock::connection_manager #FS#safe_core/src/client/mock/connection_manager.rs#FE#:109] Disconnected from the network; sending the notification.
+TRACE 15:39:40.561465201 client::tests::deletions_should_be_free [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:331] Put IData at 880f8b..
+TRACE 15:39:40.626908119 client::tests::deletions_should_be_free [safe_core::utils::test_utils #FS#safe_core/src/utils/test_utils/mod.rs#FE#:77] Unexpected NetworkEvent occurred: Disconnected
+TRACE 15:39:40.627004894 client::tests::deletions_should_be_free [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:90] mutation res: Response::Mutation(Success)
+TRACE 15:39:40.627024823 client::tests::deletions_should_be_free [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:689] Put AppendOnly Data 5b6394..
+TRACE 15:39:40.693918279 client::tests::deletions_should_be_free [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:90] mutation res: Response::Mutation(Success)
+TRACE 15:39:40.693990071 client::tests::deletions_should_be_free [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:238] Put Unsequenced MData at 5b6394..
+TRACE 15:39:40.760539502 client::tests::deletions_should_be_free [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:90] mutation res: Response::Mutation(Success)
+TRACE 15:39:40.760598877 client::tests::deletions_should_be_free [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:323] Get balance for None
+TRACE 15:39:40.788850414 client::tests::deletions_should_be_free [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:1302] Delete entire Unpublished AppendOnly Data at UnpubSeq { name: 5b6394.., tag: 10 }
+TRACE 15:39:40.838902776 client::tests::deletions_should_be_free [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:90] mutation res: Response::Mutation(Success)
+TRACE 15:39:40.838936024 client::tests::deletions_should_be_free [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:1295] Delete entire Mutable Data at Unseq { name: 5b6394.., tag: 10 }
+TRACE 15:39:40.883838580 client::tests::deletions_should_be_free [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:90] mutation res: Response::Mutation(Success)
+TRACE 15:39:40.883914319 client::tests::deletions_should_be_free [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:378] Delete Unpublished IData at 880f8b..
+TRACE 15:39:40.940024131 client::tests::deletions_should_be_free [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:90] mutation res: Response::Mutation(Success)
+TRACE 15:39:40.940100774 client::tests::deletions_should_be_free [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:323] Get balance for None
+DEBUG 15:39:40.970827979 client::tests::deletions_should_be_free [safe_core::event_loop #FS#safe_core/src/event_loop.rs#FE#:70] Exiting Core Event Loop
+TRACE 15:40:47.374101366 [safe_core::client::core_client #FS#safe_core/src/client/core_client.rs#FE#:76] Creating an account.
+TRACE 15:40:47.462361005 [safe_core::config_handler #FS#safe_core/src/config_handler.rs#FE#:167] Not available: safe_core/safe_core.config
+TRACE 15:40:47.462413397 [safe_core::config_handler #FS#safe_core/src/config_handler.rs#FE#:167] Not available: safe_vault/vault_connection_info.config
+TRACE 15:40:47.462443758 [safe_core::config_handler #FS#safe_core/src/config_handler.rs#FE#:167] Not available: safe_core/safe_core.config
+TRACE 15:40:47.462450152 [safe_core::config_handler #FS#safe_core/src/config_handler.rs#FE#:167] Not available: safe_vault/vault_connection_info.config
+TRACE 15:40:47.462476144 [safe_core::client::mock::vault #FS#safe_core/src/client/mock/vault.rs#FE#:88] Mock vault: using temporary file store
+TRACE 15:40:47.549623194 [safe_core::client::mock::connection_manager #FS#safe_core/src/client/mock/connection_manager.rs#FE#:109] Disconnected from the network; sending the notification.
+TRACE 15:40:47.550101209 [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:331] Put IData at d0f1e8..
+TRACE 15:40:47.594235830 [safe_core::utils::test_utils #FS#safe_core/src/utils/test_utils/mod.rs#FE#:77] Unexpected NetworkEvent occurred: Disconnected
+TRACE 15:40:47.594326997 [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:90] mutation res: Response::Mutation(Success)
+TRACE 15:40:47.594344642 [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:689] Put AppendOnly Data fb25f5..
+TRACE 15:40:47.650633813 [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:90] mutation res: Response::Mutation(Success)
+TRACE 15:40:47.650697733 [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:238] Put Unsequenced MData at fb25f5..
+TRACE 15:40:47.706373147 [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:90] mutation res: Response::Mutation(Success)
+TRACE 15:40:47.706432435 [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:323] Get balance for None
+TRACE 15:40:47.728688337 [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:1302] Delete entire Unpublished AppendOnly Data at UnpubSeq { name: fb25f5.., tag: 10 }
+TRACE 15:40:47.773371547 [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:90] mutation res: Response::Mutation(Success)
+TRACE 15:40:47.773397778 [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:1295] Delete entire Mutable Data at Unseq { name: fb25f5.., tag: 10 }
+TRACE 15:40:47.818252107 [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:90] mutation res: Response::Mutation(Success)
+TRACE 15:40:47.818291844 [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:378] Delete Unpublished IData at d0f1e8..
+TRACE 15:40:47.863726319 [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:90] mutation res: Response::Mutation(Success)
+TRACE 15:40:47.863887532 [safe_core::client #FS#safe_core/src/client/mod.rs#FE#:323] Get balance for None
+DEBUG 15:40:47.891785579 [safe_core::event_loop #FS#safe_core/src/event_loop.rs#FE#:70] Exiting Core Event Loop
