@@ -98,7 +98,7 @@ mod tests {
     fn file_logging() {
         setup_log_config();
 
-        let log_file_name = unwrap!(PathBuf::from_str("Client.log"));
+        let log_file_name = unwrap!(PathBuf::from_str("AppClient.log"));
 
         let file_name = unwrap!(CString::new(unwrap!(log_file_name
             .clone()
