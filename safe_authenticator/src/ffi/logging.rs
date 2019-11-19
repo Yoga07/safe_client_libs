@@ -7,6 +7,8 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 //! Logging utilities
+//! This module is exact to safe_app::ffi::logging, therefore changes to either one of them should
+//! also be reflected to the other to stay in sync.
 
 use super::AuthError;
 use config_file_handler::FileHandler;
