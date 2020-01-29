@@ -31,18 +31,41 @@
     unused_qualifications,
     unused_results
 )]
-/*
-use rand::{Rng, SeedableRng, XorShiftRng};
-use tiny_keccak::sha3_256;
-use safe_app::{App, sha3_hash};
+
+use rand::{Rng, SeedableRng};
 use safe_app::logging::app_init_logging;
-use std::os::raw::c_void;
 use std::ptr;
 use std::sync::Mutex;
 use std::sync::mpsc::{self, Sender};
 use std::time::Instant;
-use safe_authenticator::test_utils::{register_app, create_account_and_login, random_client};
-use safe_app::test_utils::{create_auth_req_with_access, create_app};
+use ffi_utils::test_utils::{call_0, call_1, call_2, call_vec};
+use ffi_utils::FfiResult;
+use ffi_utils::ReprC;
+use safe_app::entry_actions::{mdata_entry_actions_insert, mdata_entry_actions_new};
+use safe_app::ffi::app_registered;
+use safe_app::ffi::ipc::encode_auth_req;
+use safe_app::mutable_data::permissions::{
+    mdata_permissions_insert, mdata_permissions_len, mdata_permissions_new,
+};
+use safe_app::mutable_data::{
+    mdata_list_user_permissions, mdata_mutate_entries, mdata_put, seq_mdata_list_values,
+    ENTRIES_EMPTY,
+};
+use safe_app::{decode_ipc_msg, run, App, MDataPermissionsHandle};
+use safe_authenticator::ffi::ipc::encode_auth_resp;
+use safe_authenticator::{create_acc, ffi::login, Authenticator};
+use safe_core::client::Client;
+use safe_core::core_structs::MDataValue;
+use safe_core::ffi::ipc::req::PermissionSet as FfiPermissionSet;
+use safe_core::ffi::ipc::resp::AuthGranted as FfiAuthGranted;
+use safe_core::ipc::req::{permission_set_clone_from_repr_c, permission_set_into_repr_c};
+use safe_core::ipc::{AppExchangeInfo, AuthGranted, AuthReq};
+use safe_core::MDataInfo as NativeMDataInfo;
+use safe_nd::{AppPermissions, MDataAction, MDataAddress, MDataPermissionSet, XorName};
+use std::ffi::CString;
+use std::os::raw::c_void;
+use tiny_keccak::sha3_256;
+use unwrap::unwrap;
 
 static USAGE: &'static str = "
 Usage:
@@ -63,76 +86,38 @@ const MSGS_SENT_BY_EACH_BOT: usize = 10;
 
 
 struct Bot {
-//    app_h: App,
+    auth: Authenticator,
     email: String,
     tx_msgs: Vec<Vec<u8>>,
 }
 
 impl Bot {
-    fn new(n: usize, account_exists: bool) -> Result<Self, i32> {
-//        let mut session: *mut Session = ptr::null_mut();
-//        let auth = create_account_and_login();
-//        let client =
-//        let mut sec_0: String = rng.gen_iter::<char>().take(10).collect();
-//        let mut sec_1: String = rng.gen_iter::<char>().take(10).collect();
-//        sec_0.push_str(&n.to_string());
-//        sec_1.push_str(&n.to_string());
-//        if account_exists {
-//            unsafe {
-//                assert_eq!(log_in(sec_0.as_bytes().as_ptr(),
-//                                  sec_0.as_bytes().len(),
-//                                  sec_1.as_bytes().as_ptr(),
-//                                  sec_1.as_bytes().len(),
-//                                  &mut session,
-//                                  ptr::null_mut(),
-//                                  network_event_callback),
-//                           0);
-//            }
-//        } else {
-//            unsafe {
-//                assert_eq!(create_account(sec_0.as_bytes().as_ptr(),
-//                                          sec_0.as_bytes().len(),
-//                                          sec_1.as_bytes().as_ptr(),
-//                                          sec_1.as_bytes().len(),
-//                                          &mut session,
-//                                          ptr::null_mut(),
-//                                          network_event_callback),
-//                           0);
-//            }
-//        }
-//        let app_name = format!("Bot-{}", n);
-//        let unique_token = format!("Bot-{}", n);
-//        let vendor = "MaidSafe".to_string();
-//        let app_h = unsafe {
-//            try!(c1(|user_data, cb| {
-//                register_app(session,
-//                             app_name.as_bytes().as_ptr(),
-//                             app_name.as_bytes().len(),
-//                             unique_token.as_bytes().as_ptr(),
-//                             unique_token.as_bytes().len(),
-//                             vendor.as_bytes().as_ptr(),
-//                             vendor.as_bytes().len(),
-//                             false,
-//                             user_data,
-//                             cb)
-//            }))
-//        };
-//        let prefix: String = rng.gen_iter::<char>().take(10).collect();
-//        let email = format!("{}-Bot-{}-mail", prefix, n);
-//        let tx_msgs = (0..MSGS_SENT_BY_EACH_BOT)
-//            .map(|x| {
-//                let mut msg: Vec<_> = rng.gen_iter::<u8>().take(10).collect();
-//                msg.extend(format!("Bot-{}-msg-{}", n, x).into_bytes());
-//                msg
-//            })
-//            .collect();
-//        Ok(Bot {
-//            app_h: app_h,
-//            session: session,
-//            email: email,
-//            tx_msgs: tx_msgs,
-//        })
+    fn new(n: usize, account_exists: bool) -> Self {
+        let mut sec_0: String = rng.gen_iter::<char>().take(10).collect();
+        let mut sec_1: String = rng.gen_iter::<char>().take(10).collect();
+        sec_0.push_str(&n.to_string());
+        sec_1.push_str(&n.to_string());
+        let c_sec_0 = unwrap!(CString::new(secret_0));
+        let c_sec_1 = unwrap!(CString::new(secret_1));
+        let auth = account_creation(c_sec_0, c_sec_1);
+        let auth = unsafe { &*auth };
+
+        let prefix: String = rng.gen_iter::<char>().take(10).collect();
+        let email = format!("{}-Bot-{}-mail", prefix, n);
+        let tx_msgs = (0..MSGS_SENT_BY_EACH_BOT)
+            .map(|x| {
+                let mut msg: Vec<_> = rng.gen_iter::<u8>().take(10).collect();
+                msg.extend(format!("Bot-{}-msg-{}", n, x).into_bytes());
+                msg
+            })
+            .collect();
+        Self {
+            auth: auth.clone(),
+            email,
+            tx_msgs,
+        }
     }
+
     fn create_email(&self) -> Result<(), i32> {
         let Digest(digest) = sha3_256(self.email.as_bytes());
 
@@ -253,6 +238,54 @@ impl Drop for Bot {
 }
 unsafe impl Send for Bot {}
 unsafe impl Sync for Bot {}
+
+fn account_creation(sec_0: CString, sec_1: CString) -> *mut Authenticator {
+    println!("\nCreate an account ...");
+    unsafe {
+            unwrap!(call_1(|ud, cb| create_acc(sec_0.as_ptr(), sec_1.as_ptr(), ud, disconnect_cb, cb)))
+    }
+}
+
+//fn account_login(sec_0: CString, sec_1: CString) -> *mut Authenticator {
+//    println!("\nTrying to log in ...");
+//    unsafe {
+//        unwrap!((call_1(|ud, cb| login(sec_0.as_ptr(), sec_1.as_ptr(), ud, print_disconnect_cb, cb)))
+//    }
+//}
+
+//fn network_login() -> *mut Authenticator {
+//    println!("\nDo you already have an account created (enter Y for yes) ?");
+//    let mut user_option = String::new();
+//    let _ = std::io::stdin().read_line(&mut user_option);
+//    user_option = user_option.trim().to_string();
+//    if user_option != "Y" && user_option != "y" {
+//        println!("\n\tAccount Creation");
+//        println!("\t================");
+//    } else {
+//        println!("\n\n\tAccount Login");
+//        println!("\t====================");
+//    }
+//
+//    let mut secret_0 = String::new();
+//    let mut secret_1 = String::new();
+//    println!("\n------------ Enter account-locator ---------------");
+//    let _ = std::io::stdin().read_line(&mut secret_0);
+//    secret_0 = secret_0.trim().to_string();
+//    println!("\n------------ Enter password ---------------");
+//    let _ = std::io::stdin().read_line(&mut secret_1);
+//    secret_1 = secret_1.trim().to_string();
+//    let c_sec_0 = unwrap!(CString::new(secret_0));
+//    let c_sec_1 = unwrap!(CString::new(secret_1));
+//
+//    if user_option != "Y" && user_option != "y" {
+//        account_creation(c_sec_0, c_sec_1)
+//    } else {
+//        account_login(c_sec_0, c_sec_1)
+//    }
+//}
+
+
+/*
 fn main() {
     // Sample timings in release run with mock-routing and cleared
     // VaultStorageSimulation:
@@ -469,3 +502,120 @@ unsafe fn c3<F, T0, T1, T2>(f: F) -> Result<(T0, T1, T2), i32>
 */
 
 fn main() {}
+
+fn ffi_authorise_app(auth_h: *mut Authenticator, app_info: &AppExchangeInfo) -> AuthGranted {
+    let auth_req = AuthReq {
+        app: app_info.clone(),
+        app_container: true,
+        app_permissions: AppPermissions {
+            transfer_coins: true,
+            perform_mutations: true,
+            get_balance: true,
+        },
+        containers: Default::default(),
+    };
+    let ffi_auth_req = unwrap!(auth_req.clone().into_repr_c());
+
+    let (req_id, _encoded): (u32, String) =
+        unsafe { unwrap!(call_2(|ud, cb| encode_auth_req(&ffi_auth_req, ud, cb))) };
+
+    let encoded_auth_resp: String = unsafe {
+        unwrap!(call_1(|ud, cb| {
+            let auth_req = unwrap!(auth_req.into_repr_c());
+            encode_auth_resp(
+                auth_h, &auth_req, req_id, true, // is_granted
+                ud, cb,
+            )
+        }))
+    };
+    let encoded_auth_resp = unwrap!(CString::new(encoded_auth_resp));
+
+    let mut context = Context {
+        unexpected_cb: false,
+        req_id: 0,
+        auth_granted: None,
+    };
+
+    let context_ptr: *mut Context = &mut context;
+    unsafe {
+        decode_ipc_msg(
+            encoded_auth_resp.as_ptr(),
+            context_ptr as *mut c_void,
+            auth_cb,
+            unregistered_cb,
+            containers_cb,
+            share_mdata_cb,
+            revoked_cb,
+            err_cb,
+        );
+    }
+
+    assert!(!context.unexpected_cb);
+    assert_eq!(context.req_id, req_id);
+
+    unwrap!(context.auth_granted)
+}
+
+struct Context {
+    unexpected_cb: bool,
+    req_id: u32,
+    auth_granted: Option<AuthGranted>,
+}
+
+extern "C" fn auth_cb(ctx: *mut c_void, req_id: u32, auth_granted: *const FfiAuthGranted) {
+    unsafe {
+        let auth_granted = unwrap!(AuthGranted::clone_from_repr_c(auth_granted));
+
+        let ctx = ctx as *mut Context;
+        (*ctx).req_id = req_id;
+        (*ctx).auth_granted = Some(auth_granted);
+    }
+}
+
+extern "C" fn containers_cb(ctx: *mut c_void, _req_id: u32) {
+    unsafe {
+        let ctx = ctx as *mut Context;
+        (*ctx).unexpected_cb = true;
+    }
+}
+
+extern "C" fn share_mdata_cb(ctx: *mut c_void, _req_id: u32) {
+    unsafe {
+        let ctx = ctx as *mut Context;
+        (*ctx).unexpected_cb = true;
+    }
+}
+
+extern "C" fn revoked_cb(ctx: *mut c_void) {
+    unsafe {
+        let ctx = ctx as *mut Context;
+        (*ctx).unexpected_cb = true;
+    }
+}
+
+extern "C" fn unregistered_cb(
+    ctx: *mut c_void,
+    _req_id: u32,
+    _bootstrap_cfg: *const u8,
+    _bootstrap_cfg_len: usize,
+) {
+    unsafe {
+        let ctx = ctx as *mut Context;
+        (*ctx).unexpected_cb = true;
+    }
+}
+
+extern "C" fn err_cb(ctx: *mut c_void, _res: *const FfiResult, _req_id: u32) {
+    unsafe {
+        let ctx = ctx as *mut Context;
+        (*ctx).unexpected_cb = true;
+    }
+}
+
+extern "C" fn disconnect_cb(_user_data: *mut c_void) {
+    panic!("Disconnect callback");
+}
+
+extern "C" fn print_disconnect_cb(_user_data: *mut c_void) {
+    println!("Fetched LoginPacket successfully. Disconnecting the throw-client and logging in ...");
+}
