@@ -26,7 +26,7 @@ const MAX_ATTEMPTS: usize = 10;
 /// are the same as those of the data being put, except it wont delete existing
 /// entries or remove existing permissions.
 pub async fn put_map(client: (impl Client + Sync + Send), data: SeqMap) -> Result<(), CoreError> {
-    let client = client.clone();
+    let mut client = client.clone();
 
     match client.put_seq_mutable_data(data.clone()).await {
         Ok(_response) => Ok(()),
@@ -39,7 +39,7 @@ pub async fn put_map(client: (impl Client + Sync + Send), data: SeqMap) -> Resul
 
 /// Mutates mutable data entries and tries to recover from errors.
 pub async fn mutate_map_entries(
-    client: (impl Client + Sync + Send),
+    mut client: (impl Client + Sync + Send),
     address: MapAddress,
     actions: MapSeqEntryActions,
 ) -> Result<(), CoreError> {
@@ -79,7 +79,7 @@ pub async fn mutate_map_entries(
 
 /// Sets user permission on the mutable data and tries to recover from errors.
 pub async fn set_map_user_permissions(
-    client: (impl Client + Sync),
+    mut client: (impl Client + Sync),
     address: MapAddress,
     user: PublicKey,
     permissions: MapPermissionSet,
@@ -123,7 +123,7 @@ pub async fn set_map_user_permissions(
 
 /// Deletes user permission on the mutable data and tries to recover from errors.
 pub async fn del_map_user_permissions(
-    client: (impl Client + Sync + Send),
+    mut client: (impl Client + Sync + Send),
     address: MapAddress,
     user: PublicKey,
     version: u64,
@@ -327,7 +327,7 @@ pub async fn ins_auth_key_to_client_h(
 ) -> Result<(), CoreError> {
     let mut attempts: usize = 0;
     let mut version_to_try = version;
-    let client = client.clone();
+    let mut client = client.clone();
     let mut done_trying = false;
     let mut response: Result<(), CoreError> = Err(CoreError::RequestTimeout);
 
@@ -481,7 +481,7 @@ mod tests_with_mock_routing {
     // Test putting map and recovering from errors
     #[tokio::test]
     async fn put_map_with_recovery() -> Result<(), CoreError> {
-        let client = random_client()?;
+        let mut client = random_client()?;
 
         let name = rand::random();
         let tag = 10_000;
@@ -568,7 +568,7 @@ mod tests_with_mock_routing {
     // Test mutating map entries and recovering from errors
     #[tokio::test]
     async fn mutate_map_entries_with_recovery() -> Result<(), CoreError> {
-        let client = random_client()?;
+        let mut client = random_client()?;
 
         let name: XorName = rand::random();
         let tag = 10_000;
@@ -658,7 +658,7 @@ mod tests_with_mock_routing {
     // Test setting and deleting user permissions and recovering from errors
     #[tokio::test]
     async fn set_and_del_map_user_permissions_with_recovery() -> Result<(), CoreError> {
-        let client = random_client()?;
+        let mut client = random_client()?;
 
         let name: XorName = rand::random();
         let tag = 10_000;

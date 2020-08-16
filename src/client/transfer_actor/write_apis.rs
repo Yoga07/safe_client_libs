@@ -8,16 +8,21 @@ use safe_transfers::ActorEvent;
 
 use crate::client::{create_cmd_message, TransferActor};
 use crate::errors::CoreError;
+use crate::ConnectionManager;
 use log::info;
 
 /// Handle Write API msg_contents for a given TransferActor.
 impl TransferActor {
     /// Delete mutable data user permission
-    pub async fn delete_blob(&mut self, address: BlobAddress) -> Result<(), CoreError> {
+    pub async fn delete_blob(
+        &mut self,
+        address: BlobAddress,
+        conn_mgr: &mut ConnectionManager,
+    ) -> Result<(), CoreError> {
         // --------------------------
         // Payment for PUT
         // --------------------------
-        let payment_proof = self.create_write_payment_proof().await?;
+        let payment_proof = self.create_write_payment_proof(conn_mgr).await?;
 
         //---------------------------------
         // The _actual_ message
@@ -25,41 +30,49 @@ impl TransferActor {
         let msg_contents =
             wrap_blob_write(BlobWrite::DeletePrivate(address), payment_proof.clone());
         let message = create_cmd_message(msg_contents);
-        let _ = self.connection_manager.send_cmd(&message).await?;
+        let _ = conn_mgr.send_cmd(&message).await?;
 
         self.apply_write_locally(payment_proof).await
     }
 
     /// Delete sequence
-    pub async fn delete_sequence(&mut self, address: SequenceAddress) -> Result<(), CoreError> {
+    pub async fn delete_sequence(
+        &mut self,
+        address: SequenceAddress,
+        conn_mgr: &mut ConnectionManager,
+    ) -> Result<(), CoreError> {
         // --------------------------
         // Payment for PUT
         // --------------------------
-        let payment_proof = self.create_write_payment_proof().await?;
+        let payment_proof = self.create_write_payment_proof(conn_mgr).await?;
 
         //---------------------------------
         // The _actual_ message
         //---------------------------------
         let msg_contents = wrap_seq_write(SequenceWrite::Delete(address), payment_proof.clone());
         let message = create_cmd_message(msg_contents);
-        let _ = self.connection_manager.send_cmd(&message).await?;
+        let _ = conn_mgr.send_cmd(&message).await?;
 
         self.apply_write_locally(payment_proof).await
     }
 
     /// Delete sequence
-    pub async fn delete_map(&mut self, address: MapAddress) -> Result<(), CoreError> {
+    pub async fn delete_map(
+        &mut self,
+        address: MapAddress,
+        conn_mgr: &mut ConnectionManager,
+    ) -> Result<(), CoreError> {
         // --------------------------
         // Payment for PUT
         // --------------------------
-        let payment_proof = self.create_write_payment_proof().await?;
+        let payment_proof = self.create_write_payment_proof(conn_mgr).await?;
 
         //---------------------------------
         // The _actual_ message
         //---------------------------------
         let msg_contents = wrap_map_write(MapWrite::Delete(address), payment_proof.clone());
         let message = create_cmd_message(msg_contents);
-        let _ = self.connection_manager.send_cmd(&message).await?;
+        let _ = conn_mgr.send_cmd(&message).await?;
 
         self.apply_write_locally(payment_proof).await
     }
@@ -70,11 +83,12 @@ impl TransferActor {
         address: MapAddress,
         user: PublicKey,
         version: u64,
+        conn_mgr: &mut ConnectionManager,
     ) -> Result<(), CoreError> {
         // --------------------------
         // Payment for PUT
         // --------------------------
-        let payment_proof = self.create_write_payment_proof().await?;
+        let payment_proof = self.create_write_payment_proof(conn_mgr).await?;
 
         //---------------------------------
         // The _actual_ message
@@ -91,7 +105,7 @@ impl TransferActor {
 
         let message = create_cmd_message(msg_contents);
 
-        let _ = self.connection_manager.send_cmd(&message).await?;
+        let _ = conn_mgr.send_cmd(&message).await?;
 
         self.apply_write_locally(payment_proof).await
     }
@@ -103,11 +117,12 @@ impl TransferActor {
         user: PublicKey,
         permissions: MapPermissionSet,
         version: u64,
+        conn_mgr: &mut ConnectionManager,
     ) -> Result<(), CoreError> {
         // --------------------------
         // Payment for PUT
         // --------------------------
-        let payment_proof = self.create_write_payment_proof().await?;
+        let payment_proof = self.create_write_payment_proof(conn_mgr).await?;
 
         //---------------------------------
         // The _actual_ message
@@ -126,7 +141,7 @@ impl TransferActor {
         let message = create_cmd_message(msg_contents);
 
         // TODO what will be the correct reponse here?... We have it validated, so registered?
-        let _ = self.connection_manager.send_cmd(&message).await?;
+        let _ = conn_mgr.send_cmd(&message).await?;
 
         self.apply_write_locally(payment_proof).await
     }
@@ -136,11 +151,12 @@ impl TransferActor {
         &mut self,
         address: MapAddress,
         changes: MapEntryActions,
+        conn_mgr: &mut ConnectionManager,
     ) -> Result<(), CoreError> {
         // --------------------------
         // Payment for PUT
         // --------------------------
-        let payment_proof = self.create_write_payment_proof().await?;
+        let payment_proof = self.create_write_payment_proof(conn_mgr).await?;
 
         //---------------------------------
         // The _actual_ message
@@ -150,7 +166,7 @@ impl TransferActor {
             wrap_map_write(MapWrite::Edit { address, changes }, payment_proof.clone());
 
         let message = create_cmd_message(msg_contents);
-        let _ = self.connection_manager.send_cmd(&message).await?;
+        let _ = conn_mgr.send_cmd(&message).await?;
 
         self.apply_write_locally(payment_proof).await
     }
@@ -159,18 +175,19 @@ impl TransferActor {
     pub async fn set_sequence_owner(
         &mut self,
         op: SequenceWriteOp<SequenceOwner>,
+        conn_mgr: &mut ConnectionManager,
     ) -> Result<(), CoreError> {
         // --------------------------
         // Payment for PUT
         // --------------------------
-        let payment_proof = self.create_write_payment_proof().await?;
+        let payment_proof = self.create_write_payment_proof(conn_mgr).await?;
 
         //---------------------------------
         // The _actual_ message
         //---------------------------------
         let msg_contents = wrap_seq_write(SequenceWrite::SetOwner(op), payment_proof.clone());
         let message = create_cmd_message(msg_contents);
-        let _ = self.connection_manager.send_cmd(&message).await?;
+        let _ = conn_mgr.send_cmd(&message).await?;
 
         self.apply_write_locally(payment_proof).await
     }
@@ -180,11 +197,12 @@ impl TransferActor {
     pub async fn edit_sequence_private_perms(
         &mut self,
         op: SequenceWriteOp<SequencePrivatePermissions>,
+        conn_mgr: &mut ConnectionManager,
     ) -> Result<(), CoreError> {
         // --------------------------
         // Payment for PUT
         // --------------------------
-        let payment_proof = self.create_write_payment_proof().await?;
+        let payment_proof = self.create_write_payment_proof(conn_mgr).await?;
 
         //---------------------------------
         // The _actual_ message
@@ -194,7 +212,7 @@ impl TransferActor {
             payment_proof.clone(),
         );
         let message = create_cmd_message(msg_contents);
-        let _ = self.connection_manager.send_cmd(&message).await?;
+        let _ = conn_mgr.send_cmd(&message).await?;
 
         self.apply_write_locally(payment_proof).await
     }
@@ -204,11 +222,12 @@ impl TransferActor {
     pub async fn edit_sequence_public_perms(
         &mut self,
         op: SequenceWriteOp<SequencePublicPermissions>,
+        conn_mgr: &mut ConnectionManager,
     ) -> Result<(), CoreError> {
         // --------------------------
         // Payment for PUT
         // --------------------------
-        let payment_proof = self.create_write_payment_proof().await?;
+        let payment_proof = self.create_write_payment_proof(conn_mgr).await?;
 
         //---------------------------------
         // The _actual_ message
@@ -218,7 +237,7 @@ impl TransferActor {
             payment_proof.clone(),
         );
         let message = create_cmd_message(msg_contents);
-        let _ = self.connection_manager.send_cmd(&message).await?;
+        let _ = conn_mgr.send_cmd(&message).await?;
 
         self.apply_write_locally(payment_proof).await
     }
@@ -228,103 +247,125 @@ impl TransferActor {
     pub async fn append_to_sequence(
         &mut self,
         op: SequenceWriteOp<Vec<u8>>,
+        conn_mgr: &mut ConnectionManager,
     ) -> Result<(), CoreError> {
         // --------------------------
         // Payment for PUT
         // --------------------------
-        let payment_proof = self.create_write_payment_proof().await?;
+        let payment_proof = self.create_write_payment_proof(conn_mgr).await?;
 
         //---------------------------------
         // The _actual_ message
         //---------------------------------
         let msg_contents = wrap_seq_write(SequenceWrite::Edit(op), payment_proof.clone());
         let message = create_cmd_message(msg_contents);
-        let _ = self.connection_manager.send_cmd(&message).await?;
+        let _ = conn_mgr.send_cmd(&message).await?;
 
         self.apply_write_locally(payment_proof).await
     }
 
     /// Store a new public sequenced data object
     /// Wraps msg_contents for payment validation and mutation
-    pub async fn new_sequence(&mut self, data: Sequence) -> Result<(), CoreError> {
+    pub async fn new_sequence(
+        &mut self,
+        data: Sequence,
+        conn_mgr: &mut ConnectionManager,
+    ) -> Result<(), CoreError> {
         // --------------------------
         // Payment for PUT
         // --------------------------
-        let payment_proof = self.create_write_payment_proof().await?;
+        let payment_proof = self.create_write_payment_proof(conn_mgr).await?;
 
         //---------------------------------
         // The _actual_ message
         //---------------------------------
         let msg_contents = wrap_seq_write(SequenceWrite::New(data), payment_proof.clone());
         let message = create_cmd_message(msg_contents);
-        let _ = self.connection_manager.send_cmd(&message).await?;
+        let _ = conn_mgr.send_cmd(&message).await?;
 
         self.apply_write_locally(payment_proof).await
     }
 
     /// Store a new public mutable data object
     /// Wraps msg_contents for payment validation and mutation
-    pub async fn new_map(&mut self, data: Map) -> Result<(), CoreError> {
+    pub async fn new_map(
+        &mut self,
+        data: Map,
+        conn_mgr: &mut ConnectionManager,
+    ) -> Result<(), CoreError> {
         // --------------------------
         // Payment for PUT
         // --------------------------
-        let payment_proof = self.create_write_payment_proof().await?;
+        let payment_proof = self.create_write_payment_proof(conn_mgr).await?;
 
         //---------------------------------
         // The _actual_ message
         //---------------------------------
         let msg_contents = wrap_map_write(MapWrite::New(data), payment_proof.clone());
         let message = create_cmd_message(msg_contents);
-        let _ = self.connection_manager.send_cmd(&message).await?;
+        let _ = conn_mgr.send_cmd(&message).await?;
 
         self.apply_write_locally(payment_proof).await
     }
 
     /// Store a new immutabledata object
     /// Wraps msg_contents for payment validation and mutation
-    pub async fn new_blob(&mut self, data: Blob) -> Result<(), CoreError> {
+    pub async fn new_blob(
+        &mut self,
+        data: Blob,
+        conn_mgr: &mut ConnectionManager,
+    ) -> Result<(), CoreError> {
         // --------------------------
         // Payment for PUT
         // --------------------------
-        let payment_proof = self.create_write_payment_proof().await?;
+        let payment_proof = self.create_write_payment_proof(conn_mgr).await?;
 
         //---------------------------------
         // The _actual_ message
         //---------------------------------
         let msg_contents = wrap_blob_write(BlobWrite::New(data), payment_proof.clone());
         let message = create_cmd_message(msg_contents);
-        let _ = self.connection_manager.send_cmd(&message).await?;
+        let _ = conn_mgr.send_cmd(&message).await?;
 
         self.apply_write_locally(payment_proof).await
     }
 
     /// Store a new login packet
     /// Wraps msg_contents for payment validation and mutation
-    pub async fn new_account(&mut self, account: Account) -> Result<(), CoreError> {
+    pub async fn new_account(
+        &mut self,
+        account: Account,
+        conn_mgr: &mut ConnectionManager,
+    ) -> Result<(), CoreError> {
         info!("Store login packet");
         // --------------------------
         // Payment for PUT
         // --------------------------
-        let payment_proof = self.create_write_payment_proof().await?;
+        let payment_proof = self.create_write_payment_proof(conn_mgr).await?;
 
         //---------------------------------
         // The _actual_ message
         //---------------------------------
         let msg_contents = wrap_account_write(AccountWrite::New(account), payment_proof.clone());
         let message = create_cmd_message(msg_contents);
-        let _ = self.connection_manager.send_cmd(&message).await?;
+        let _ = conn_mgr.send_cmd(&message).await?;
 
         self.apply_write_locally(payment_proof).await
     }
 
     /// Delete a key at the ClientHandler/Authenticator data structs
     /// Wraps msg_contents for payment validation and mutation
-    pub async fn delete_auth_key(&mut self, key: PublicKey, version: u64) -> Result<(), CoreError> {
+    pub async fn delete_auth_key(
+        &mut self,
+        key: PublicKey,
+        version: u64,
+        conn_mgr: &mut ConnectionManager,
+    ) -> Result<(), CoreError> {
         info!("Store login packet");
         // --------------------------
         // Payment for PUT
         // --------------------------
-        let payment_proof = self.create_write_payment_proof().await?;
+        let payment_proof = self.create_write_payment_proof(conn_mgr).await?;
 
         //---------------------------------
         // The _actual_ message
@@ -335,7 +376,7 @@ impl TransferActor {
             version,
         });
         let message = create_cmd_message(msg_contents);
-        let _ = self.connection_manager.send_cmd(&message).await?;
+        let _ = conn_mgr.send_cmd(&message).await?;
 
         self.apply_write_locally(payment_proof).await
     }
@@ -347,12 +388,13 @@ impl TransferActor {
         key: PublicKey,
         permissions: AppPermissions,
         version: u64,
+        conn_mgr: &mut ConnectionManager,
     ) -> Result<(), CoreError> {
         info!("Store login packet");
         // --------------------------
         // Payment for PUT
         // --------------------------
-        let payment_proof = self.create_write_payment_proof().await?;
+        let payment_proof = self.create_write_payment_proof(conn_mgr).await?;
 
         //---------------------------------
         // The _actual_ message
@@ -364,7 +406,7 @@ impl TransferActor {
             version,
         });
         let message = create_cmd_message(msg_contents);
-        let _ = self.connection_manager.send_cmd(&message).await?;
+        let _ = conn_mgr.send_cmd(&message).await?;
 
         self.apply_write_locally(payment_proof).await
     }
@@ -396,14 +438,14 @@ mod tests {
     #[tokio::test]
     #[cfg(feature = "simulated-payouts")]
     async fn transfer_actor_with_no_balance_cannot_store_data() -> Result<(), CoreError> {
-        let (safe_key, cm) = get_keys_and_connection_manager().await;
+        let (safe_key, mut cm) = get_keys_and_connection_manager().await;
 
         let data = Sequence::new_pub(safe_key.public_key(), XorName::random(), 33323);
 
         let mut initial_actor =
-            TransferActor::new_no_initial_balance(safe_key.clone(), cm.clone()).await?;
+            TransferActor::new_no_initial_balance(safe_key.clone(), &mut cm).await?;
 
-        match initial_actor.new_sequence(data).await {
+        match initial_actor.new_sequence(data, &mut cm).await {
             Err(CoreError::DataError(e)) => {
                 assert_eq!(e.to_string(), "Not enough money to complete this operation");
             }

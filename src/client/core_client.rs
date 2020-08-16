@@ -19,7 +19,7 @@ use crate::network_event::NetworkTx;
 use crate::utils;
 use async_trait::async_trait;
 use futures::lock::Mutex;
-use log::{info, trace};
+use log::trace;
 use rand::rngs::StdRng;
 use rand::{thread_rng, SeedableRng};
 use safe_nd::{Account, ClientFullId, PublicKey};
@@ -91,11 +91,11 @@ impl CoreClient {
         let _new_balance_owner = *balance_client_id.public_id().public_key();
 
         let balance_client_id = SafeKey::client(balance_client_id);
-        let balance_pub_id = balance_client_id.public_id();
+        // let balance_pub_id = balance_client_id.public_id();
 
         // Create the connection manager
         let mut connection_manager =
-            attempt_bootstrap(&Config::new().quic_p2p, &net_tx, balance_client_id.clone()).await?;
+            attempt_bootstrap(&Config::new().quic_p2p, balance_client_id.clone()).await?;
 
         connection_manager = connection_manager_wrapper_fn(connection_manager);
 
@@ -103,16 +103,16 @@ impl CoreClient {
         // create the login packet
         // ----------------------
         let mut the_actor =
-            TransferActor::new(balance_client_id.clone(), connection_manager.clone()).await?;
+            TransferActor::new(balance_client_id.clone(), &mut connection_manager).await?;
         let transfer_actor = Some(the_actor.clone());
 
-        let _ = the_actor.new_account(new_login_packet).await?;
-
-        connection_manager.disconnect(&balance_pub_id).await?;
-
-        connection_manager
-            .bootstrap(maid_keys.client_safe_key())
+        let _ = the_actor
+            .new_account(new_login_packet, &mut connection_manager)
             .await?;
+
+        // connection_manager.disconnect(&balance_pub_id).await?;
+
+        connection_manager.bootstrap().await?;
 
         Ok(Self {
             inner: Arc::new(Mutex::new(Inner::new(
@@ -146,6 +146,11 @@ impl Client for CoreClient {
         self.inner.clone()
     }
 
+    /// Return the TransferActor for this client
+    async fn transfer_actor(&self) -> Option<TransferActor> {
+        self.transfer_actor.clone()
+    }
+
     async fn public_encryption_key(&self) -> threshold_crypto::PublicKey {
         self.keys.enc_public_key
     }
@@ -156,11 +161,6 @@ impl Client for CoreClient {
 
     async fn secret_symmetric_key(&self) -> shared_secretbox::Key {
         self.keys.enc_key.clone()
-    }
-
-    /// Return the TransferActor for this client
-    async fn transfer_actor(&self) -> Option<TransferActor> {
-        self.transfer_actor.clone()
     }
 }
 

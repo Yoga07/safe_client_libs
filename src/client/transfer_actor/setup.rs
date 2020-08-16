@@ -1,18 +1,17 @@
-use safe_nd::{Money, PublicKey, Query, QueryResponse, TransferQuery};
-use safe_transfers::TransferActor as SafeTransferActor;
-
-use std::str::FromStr;
-
 use crate::client::ConnectionManager;
 use crate::client::{create_query_message, ClientTransferValidator, SafeKey, TransferActor};
 use crate::errors::CoreError;
-use crdts::Dot;
-
+// use crdts::Dot;
 use futures::lock::Mutex;
 use log::{info, trace};
-
+use safe_nd::{PublicKey, Query, QueryResponse, TransferQuery};
+use safe_transfers::TransferActor as SafeTransferActor;
 use std::sync::Arc;
 use threshold_crypto::{PublicKeySet, SecretKey};
+
+use crdts::Dot;
+#[cfg(feature = "simulated-payouts")]
+use {safe_nd::Money, std::str::FromStr};
 
 /// Handle all Money transfers and Write API requests for a given ClientId.
 impl TransferActor {
@@ -42,7 +41,7 @@ impl TransferActor {
     /// Create a new Transfer Actor for a previously unused public key
     pub async fn new(
         safe_key: SafeKey,
-        mut connection_manager: ConnectionManager,
+        conn_mgr: &mut ConnectionManager,
     ) -> Result<Self, CoreError> {
         info!(
             "Initiating Safe Transfer Actor for PK {:?}",
@@ -51,8 +50,7 @@ impl TransferActor {
         let simulated_farming_payout_dot =
             Dot::new(PublicKey::from(SecretKey::random().public_key()), 0);
 
-        let replicas_pk_set =
-            TransferActor::get_replica_keys(safe_key.clone(), &mut connection_manager).await?;
+        let replicas_pk_set = TransferActor::get_replica_keys(safe_key.clone(), conn_mgr).await?;
 
         let validator = ClientTransferValidator {};
 
@@ -62,10 +60,9 @@ impl TransferActor {
             validator,
         )));
 
-        let actor = Self {
+        let mut actor = Self {
             safe_key: safe_key.clone(),
             transfer_actor,
-            connection_manager,
             replicas_pk_set,
             simulated_farming_payout_dot, // replicas_sk_set
         };
@@ -79,6 +76,7 @@ impl TransferActor {
                         .trigger_simulated_farming_payout(
                             safe_key.public_key(),
                             Money::from_str("10")?,
+                            conn_mgr,
                         )
                         .await?;
                 }
@@ -88,6 +86,7 @@ impl TransferActor {
                             safe_key.public_key(),
                             // arbitrarily odd amount of money for apps, jsut so it's easier to see
                             Money::from_str("1.7")?,
+                            conn_mgr,
                         )
                         .await?;
                 }
@@ -100,7 +99,7 @@ impl TransferActor {
     pub async fn for_existing_account(
         safe_key: SafeKey,
         // history: History,
-        mut connection_manager: ConnectionManager,
+        connection_manager: &mut ConnectionManager,
     ) -> Result<Self, CoreError> {
         info!(
             "Setting up SafeTransferActor for existing PK : {:?}",
@@ -110,7 +109,7 @@ impl TransferActor {
             Dot::new(PublicKey::from(SecretKey::random().public_key()), 0);
 
         let replicas_pk_set =
-            TransferActor::get_replica_keys(safe_key.clone(), &mut connection_manager).await?;
+            TransferActor::get_replica_keys(safe_key.clone(), connection_manager).await?;
 
         let validator = ClientTransferValidator {};
 
@@ -120,12 +119,11 @@ impl TransferActor {
         let mut full_actor = Self {
             safe_key,
             transfer_actor: Arc::new(Mutex::new(transfer_actor)),
-            connection_manager,
             replicas_pk_set,
             simulated_farming_payout_dot, // replicas_sk_set
         };
 
-        full_actor.get_history().await?;
+        full_actor.get_history(connection_manager).await?;
 
         Ok(full_actor)
     }
@@ -144,8 +142,8 @@ mod tests {
 
     #[tokio::test]
     async fn transfer_actor_creation__() -> Result<(), CoreError> {
-        let (safe_key, cm) = get_keys_and_connection_manager().await;
-        let _transfer_actor = TransferActor::new(safe_key, cm.clone()).await?;
+        let (safe_key, mut cm) = get_keys_and_connection_manager().await;
+        let _transfer_actor = TransferActor::new(safe_key, &mut cm).await?;
 
         assert!(true);
 
@@ -154,9 +152,9 @@ mod tests {
 
     #[tokio::test]
     async fn transfer_actor_creation_hydration_for_nonexistant_balance() -> Result<(), CoreError> {
-        let (safe_key, cm) = get_keys_and_connection_manager().await;
+        let (safe_key, mut cm) = get_keys_and_connection_manager().await;
 
-        match TransferActor::for_existing_account(safe_key, cm.clone()).await {
+        match TransferActor::for_existing_account(safe_key, &mut cm).await {
             Ok(actor) => {
                 assert_eq!(actor.get_local_balance().await, Money::from_str("0").unwrap() );
                 Ok(())
@@ -170,18 +168,22 @@ mod tests {
     #[cfg(not(feature = "mock-network"))]
     async fn transfer_actor_creation_hydration_for_existing_balance() -> Result<(), CoreError> {
         let (safe_key, _cm) = get_keys_and_connection_manager().await;
-        let (safe_key_two, cm) = get_keys_and_connection_manager().await;
+        let (safe_key_two, mut cm) = get_keys_and_connection_manager().await;
 
-        let mut initial_actor = TransferActor::new(safe_key.clone(), cm.clone()).await?;
+        let mut initial_actor = TransferActor::new(safe_key.clone(), &mut cm).await?;
 
         let _ = initial_actor
-            .trigger_simulated_farming_payout(safe_key_two.public_key(), Money::from_str("100")?)
+            .trigger_simulated_farming_payout(
+                safe_key_two.public_key(),
+                Money::from_str("100")?,
+                &mut cm,
+            )
             .await?;
 
-        match TransferActor::for_existing_account(safe_key_two, cm.clone()).await {
-            Ok(actor) => {
+        match TransferActor::for_existing_account(safe_key_two, &mut cm).await {
+            Ok(mut actor) => {
                 assert_eq!(
-                    actor.get_balance_from_network(None).await?,
+                    actor.get_balance_from_network(None, &mut cm).await?,
                     Money::from_str("100")?
                 );
                 assert_eq!(actor.get_local_balance().await, Money::from_str("100")?);

@@ -239,7 +239,7 @@ mod tests {
         let key = shared_secretbox::gen_key();
 
         let client = random_client()?;
-        let client2 = client.clone();
+        let mut client2 = client.clone();
         let client3 = client.clone();
 
         let data = create(&client, &value, true, None).await?;
@@ -261,7 +261,7 @@ mod tests {
         let key = shared_secretbox::gen_key();
 
         let client = random_client()?;
-        let client2 = client.clone();
+        let mut client2 = client.clone();
         let client3 = client.clone();
 
         let data = create(&client, &value, true, Some(key)).await?;
@@ -281,7 +281,7 @@ mod tests {
         let value = utils::generate_random_vector(size);
 
         let client = random_client()?;
-        let client2 = client.clone();
+        let mut client2 = client.clone();
         let client3 = client.clone();
 
         let data = create(&client, &value, true, None).await?;
@@ -303,7 +303,7 @@ mod tests {
         let value = utils::generate_random_vector(size);
 
         let client = random_client()?;
-        let client2 = client.clone();
+        let mut client2 = client.clone();
         let client3 = client.clone();
 
         let data = create(&client, &value, false, None).await?;
@@ -367,7 +367,7 @@ mod tests {
         let key = shared_secretbox::gen_key();
 
         let client = random_client()?;
-        let client2 = client.clone();
+        let mut client2 = client.clone();
         let client3 = client.clone();
 
         let data = create(&client, &value, true, None).await?;
@@ -389,7 +389,7 @@ mod tests {
         let key = shared_secretbox::gen_key();
 
         let client = random_client()?;
-        let client2 = client.clone();
+        let mut client2 = client.clone();
         let client3 = client.clone();
 
         let data = create(&client, &value, true, Some(key)).await?;
@@ -409,7 +409,7 @@ mod tests {
         let value = utils::generate_random_vector(size);
 
         let client = random_client()?;
-        let client2 = client.clone();
+        let mut client2 = client.clone();
         let client3 = client.clone();
 
         let data = create(&client, &value, true, None).await?;
@@ -431,7 +431,7 @@ mod tests {
         let value = utils::generate_random_vector(size);
 
         let client = random_client()?;
-        let client2 = client.clone();
+        let mut client2 = client.clone();
         let client3 = client.clone();
 
         let data = create(&client, &value, false, None).await?;
@@ -454,7 +454,7 @@ mod tests {
         {
             // Read first half
             let client = random_client()?;
-            let client2 = client.clone();
+            let mut client2 = client.clone();
             let client3 = client.clone();
 
             let data = create(&client, &value, true, None).await?;
@@ -471,7 +471,7 @@ mod tests {
             // Read Second half
             let client = random_client()?;
 
-            let client2 = client.clone();
+            let mut client2 = client.clone();
             let client3 = client.clone();
 
             let data = create(&client, &value2, true, None).await?;
@@ -505,7 +505,7 @@ mod tests {
         let client = random_client()?;
         let client2 = client.clone();
         let client3 = client.clone();
-        let client4 = client.clone();
+        let mut client4 = client.clone();
         let client5 = client.clone();
 
         let key2 = key.clone();

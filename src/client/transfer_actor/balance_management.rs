@@ -7,6 +7,7 @@ use safe_transfers::{ActorEvent, TransferInitiated};
 use crate::client::{create_cmd_message, create_query_message, TransferActor};
 use crate::errors::CoreError;
 
+use crate::ConnectionManager;
 use log::{debug, info, trace};
 
 /// Handle all Money transfers and Write API requests for a given ClientId.
@@ -60,6 +61,7 @@ impl TransferActor {
     pub async fn get_balance_from_network(
         &mut self,
         pk: Option<PublicKey>,
+        conn_mgr: &mut ConnectionManager,
     ) -> Result<Money, CoreError> {
         info!("Getting balance for {:?} or self", pk);
         let identity = self.safe_key.clone();
@@ -70,23 +72,26 @@ impl TransferActor {
         let msg_contents = Query::Transfer(TransferQuery::GetBalance(public_key));
 
         let message = create_query_message(msg_contents);
-        self.connection_manager.bootstrap().await?;
+        conn_mgr.bootstrap().await?;
 
-        match self.connection_manager.send_query(&message).await? {
+        match conn_mgr.send_query(&message).await? {
             QueryResponse::GetBalance(balance) => balance.map_err(CoreError::from),
             _ => Err(CoreError::from("Unexpected response when querying balance")),
         }
     }
 
     /// Send money
-    pub async fn send_money(&mut self, to: PublicKey, amount: Money) -> Result<(), CoreError> {
+    pub async fn send_money(
+        &mut self,
+        to: PublicKey,
+        amount: Money,
+        conn_mgr: &mut ConnectionManager,
+    ) -> Result<(), CoreError> {
         info!("Sending money");
 
         //set up message
-        let safe_key = self.safe_key.clone();
-
         // first make sure our balance  history is up to date
-        self.get_history().await?;
+        self.get_history(conn_mgr).await?;
 
         // let mut actor = self.transfer_actor.lock().await;
 
@@ -118,9 +123,7 @@ impl TransferActor {
                 signed_transfer,
             }))?;
 
-        let debit_proof: DebitAgreementProof = self
-            .await_validation(&safe_key.public_id(), &message)
-            .await?;
+        let debit_proof: DebitAgreementProof = self.await_validation(&message, conn_mgr).await?;
 
         // Register the transfer on the network.
         let msg_contents = Cmd::Transfer(TransferCmd::RegisterTransfer(debit_proof.clone()));
@@ -131,7 +134,7 @@ impl TransferActor {
             debit_proof
         );
 
-        let _ = self.connection_manager.send_cmd(&message).await?;
+        let _ = conn_mgr.send_cmd(&message).await?;
 
         let mut actor = self.transfer_actor.lock().await;
         // First register with local actor, then reply.
@@ -160,14 +163,13 @@ mod tests {
     #[tokio::test]
     #[cfg(feature = "simulated-payouts")]
     async fn transfer_actor_can_send_money_and_thats_reflected_locally() -> Result<(), CoreError> {
-        let (safe_key, cm) = get_keys_and_connection_manager().await;
+        let (safe_key, mut cm) = get_keys_and_connection_manager().await;
         let (safe_key2, _cm) = get_keys_and_connection_manager().await;
 
-        let mut initial_actor =
-            TransferActor::new(safe_key.clone(), self.connection_manager.clone()).await?;
+        let mut initial_actor = TransferActor::new(safe_key.clone(), &mut cm).await?;
 
         let _ = initial_actor
-            .send_money(safe_key2.public_key(), Money::from_str("1")?)
+            .send_money(safe_key2.public_key(), Money::from_str("1")?, &mut cm)
             .await?;
 
         // initial 10 on creation from farming simulation minus 1
@@ -177,7 +179,9 @@ mod tests {
         );
 
         assert_eq!(
-            initial_actor.get_balance_from_network(None).await?,
+            initial_actor
+                .get_balance_from_network(None, &mut cm)
+                .await?,
             Money::from_str("9")?
         );
 
@@ -188,14 +192,14 @@ mod tests {
     #[cfg(feature = "simulated-payouts")]
     async fn transfer_actor_can_send_several_transfers_and_thats_reflected_locally(
     ) -> Result<(), CoreError> {
-        let (safe_key, cm) = get_keys_and_connection_manager().await;
+        let (safe_key, mut cm) = get_keys_and_connection_manager().await;
         let (safe_key2, _cm) = get_keys_and_connection_manager().await;
 
-        let mut initial_actor = TransferActor::new(safe_key.clone(), cm.clone()).await?;
+        let mut initial_actor = TransferActor::new(safe_key.clone(), &mut cm).await?;
 
         println!("starting.....");
         let _ = initial_actor
-            .send_money(safe_key2.public_key(), Money::from_str("1")?)
+            .send_money(safe_key2.public_key(), Money::from_str("1")?, &mut cm)
             .await?;
 
         // initial 10 on creation from farming simulation minus 1
@@ -205,14 +209,16 @@ mod tests {
         );
 
         assert_eq!(
-            initial_actor.get_balance_from_network(None).await?,
+            initial_actor
+                .get_balance_from_network(None, &mut cm)
+                .await?,
             Money::from_str("9")?
         );
 
         println!("FIRST DONE!!!!!!!!!!!!!!");
 
         let _ = initial_actor
-            .send_money(safe_key2.public_key(), Money::from_str("2")?)
+            .send_money(safe_key2.public_key(), Money::from_str("2")?, &mut cm)
             .await?;
 
         // initial 10 on creation from farming simulation minus 3

@@ -6,6 +6,7 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
+use crate::TransferActor;
 use crate::{client::SafeKey, CoreError};
 use bincode::{deserialize, serialize};
 use bytes::Bytes;
@@ -13,8 +14,8 @@ use futures::{future::join_all, lock::Mutex};
 use log::{error, info, trace};
 use quic_p2p::{self, Config as QuicP2pConfig, Connection, QuicP2pAsync};
 use safe_nd::{
-    BlsProof, HandshakeRequest, HandshakeResponse, Message, MsgEnvelope, MsgSender, Proof,
-    PublicId, QueryResponse,
+    BlsProof, DebitAgreementProof, Event, HandshakeRequest, HandshakeResponse, Message,
+    MsgEnvelope, MsgSender, Proof, PublicId, QueryResponse,
 };
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
@@ -134,10 +135,88 @@ impl ConnectionManager {
         // TODO: return an error if we didn't successfully got enough number
         // of responses to represent a majority of Elders
 
-        trace!("Response obtained from majority {} of nodes: {:?}", winner.1, winner.0);
+        trace!(
+            "Response obtained from majority {} of nodes: {:?}",
+            winner.1,
+            winner.0
+        );
         winner.0.ok_or_else(|| {
             CoreError::from(format!("Failed to obtain a response from the network."))
         })
+    }
+
+    /// Send a Message for Transfer Validation
+    pub async fn send_for_validation(
+        &mut self,
+        transfer_actor: &mut TransferActor,
+        msg: &Message,
+    ) -> Result<DebitAgreementProof, CoreError> {
+        trace!("Sending message for validation {:?}", msg.id());
+        let msg_bytes = self.serialise_in_envelope(msg)?;
+
+        // Send message to all Elders concurrently
+        trace!("Sending command to all Elders...");
+        let mut tasks = Vec::default();
+        for elder_conn in &self.elders {
+            let msg_bytes_clone = msg_bytes.clone();
+            let conn = Arc::clone(elder_conn);
+            let task_handle = tokio::spawn(async move {
+                let response = conn.lock().await.send(msg_bytes_clone).await?;
+                match deserialize(&response) {
+                    Ok(res) => {
+                        trace!("Query response received");
+                        Ok(res)
+                    }
+                    Err(e) => {
+                        let err_msg = format!("Unexpected error: {:?}", e);
+                        error!("{}", err_msg);
+                        Err(CoreError::Unexpected(err_msg))
+                    }
+                }
+            });
+            tasks.push(task_handle);
+        }
+
+        // Let's await for all messages to be sent
+        let responses = join_all(tasks).await;
+
+        // await response
+        let mut response = Err(CoreError::from("No debit agreement proof received"));
+
+        // Let's figure out what's the value which is in the majority of responses obtained
+        let mut votes_map = HashMap::<Event, usize>::default();
+        let mut winner: (Option<Event>, usize) = (None, 0);
+        for join_result in responses.into_iter() {
+            if let Ok(response_result) = join_result {
+                let response: Event = response_result.map_err(|err| {
+                    CoreError::from(format!(
+                        "Failed to obtain a response from the network: {}",
+                        err
+                    ))
+                })?;
+
+                let counter = votes_map.entry(response.clone()).or_insert(0);
+                *counter += 1;
+                if *counter > winner.1 {
+                    winner = (Some(response), *counter);
+                }
+            }
+        }
+        let resp = winner.0.ok_or(CoreError::from(format!(
+            "Failed to obtain a response from the network."
+        )))?;
+
+        // Let the actor handle receipt of each response from elders
+        match transfer_actor.handle_validation_event(resp).await {
+            Ok(proof) => {
+                if let Some(debit_agreement_proof) = proof {
+                    response = Ok(debit_agreement_proof);
+                };
+            }
+            Err(error) => response = Err(error),
+        }
+
+        response
     }
 
     // Private helpers

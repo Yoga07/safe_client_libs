@@ -33,8 +33,8 @@ use crate::crypto::{shared_box, shared_secretbox};
 use crate::errors::CoreError;
 use crate::network_event::NetworkTx;
 use core::time::Duration;
-use futures::{channel::mpsc, lock::Mutex};
-use log::{debug, info, trace};
+use futures::lock::Mutex;
+use log::{info, trace};
 use lru::LruCache;
 use quic_p2p::Config as QuicP2pConfig;
 use safe_nd::{
@@ -163,35 +163,6 @@ pub trait Client: Clone + Send + Sync {
     /// Return the symmetric encryption key.
     async fn secret_symmetric_key(&self) -> shared_secretbox::Key;
 
-    // /// Create a `Message` from the given request.
-    // /// This function adds the requester signature and message ID.
-    // async fn compose_message(&self, request: Request, sign: bool) -> Result<Message, CoreError> {
-    //     let message_id = MessageId::new();
-
-    //     let signature = if sign {
-    //         match request.clone() {
-    //             Query::Data(req) => {
-    //                 let serialised_req =
-    //                     bincode::serialize(&(&req, message_id)).map_err(CoreError::from)?;
-    //                 Some(self.full_id().await.sign(&serialised_req))
-    //             }
-    //             // Request::Node(req) => {
-    //             //     let serialised_req =
-    //             //         bincode::serialize(&(&req, message_id)).map_err(CoreError::from)?;
-    //             //     Some(self.full_id().await.sign(&serialised_req))
-    //             // }
-    //         }
-    //     } else {
-    //         None
-    //     };
-
-    //     Ok(Message::Request {
-    //         request,
-    //         message_id,
-    //         signature,
-    //     })
-    // }
-
     /// Set request timeout.
     async fn set_timeout(&self, duration: Duration) {
         let inner = self.inner();
@@ -199,23 +170,27 @@ pub trait Client: Clone + Send + Sync {
     }
 
     /// Put unsequenced mutable data to the network
-    async fn put_unseq_mutable_data(&self, data: UnseqMap) -> Result<(), CoreError>
+    async fn put_unseq_mutable_data(&mut self, data: UnseqMap) -> Result<(), CoreError>
     where
         Self: Sized,
     {
         trace!("Put Unsequenced Map at {:?}", data.name());
 
+        let inner = &mut self.inner();
         let mut actor = self
             .transfer_actor()
             .await
             .ok_or(CoreError::from("No TransferActor found for client."))?;
 
-        actor.new_map(Map::Unseq(data)).await
+        let res = actor
+            .new_map(Map::Unseq(data), inner.lock().await.cm())
+            .await;
+        res
     }
 
     /// Transfer coin balance
     async fn transfer_money(
-        &self,
+        &mut self,
         // client_id: Option<&ClientFullId>,
         to: PublicKey,
         amount: Money,
@@ -224,17 +199,20 @@ pub trait Client: Clone + Send + Sync {
         Self: Sized,
     {
         info!("Transfer {} money to {:?}", amount, to);
+
+        let inner = &mut self.inner();
         let mut actor = self
             .transfer_actor()
             .await
             .ok_or(CoreError::from("No TransferActor found for client."))?;
 
-        actor.send_money(to, amount).await
+        let res = actor.send_money(to, amount, inner.lock().await.cm()).await;
+        res
     }
 
     /// Transfer coin balance
     async fn transfer_money_as(
-        &self,
+        &mut self,
         _from: Option<PublicKey>,
         to: PublicKey,
         amount: Money,
@@ -246,18 +224,20 @@ pub trait Client: Clone + Send + Sync {
         // TODO: retrieve our actor for this clientID....
         // we can remove that and set up an API for transfer_as if needs be...
 
+        let inner = &mut self.inner();
         let mut actor = self
             .transfer_actor()
             .await
             .ok_or(CoreError::from("No TransferActor found for client."))?;
 
-        actor.send_money(to, amount).await
+        let res = actor.send_money(to, amount, inner.lock().await.cm()).await;
+        res
     }
 
     // TODO: is this API needed at all? Why not just transfer?
     /// Creates a new balance on the network. Currently same as transfer...
     async fn create_balance(
-        &self,
+        &mut self,
         _client_id: Option<&ClientFullId>,
         new_balance_owner: PublicKey,
         amount: Money,
@@ -270,16 +250,20 @@ pub trait Client: Clone + Send + Sync {
             new_balance_owner, amount
         );
 
+        let inner = &mut self.inner();
         let mut actor = self
             .transfer_actor()
             .await
             .ok_or(CoreError::from("No TransferActor found for client."))?;
 
-        actor.send_money(new_balance_owner, amount).await
+        let res = actor
+            .send_money(new_balance_owner, amount, inner.lock().await.cm())
+            .await;
+        res
     }
 
     /// Get the current coin balance via TransferActor for this client.
-    async fn get_balance(&self, client_id: Option<&ClientFullId>) -> Result<Money, CoreError>
+    async fn get_balance(&mut self, client_id: Option<&ClientFullId>) -> Result<Money, CoreError>
     where
         Self: Sized,
     {
@@ -287,43 +271,51 @@ pub trait Client: Clone + Send + Sync {
         // TODO: another api for getting local only...
         // TODO: handle client_id passed in, or remove
 
+        let inner = &mut self.inner();
         match self.full_id().await {
             SafeKey::Client(_) => {
                 // we're a standard client grabbing our own key's balance
-                self.transfer_actor()
+                let res = self
+                    .transfer_actor()
                     .await
                     .ok_or(CoreError::from("No TransferActor found for client."))?
-                    .get_balance_from_network(None)
-                    .await
+                    .get_balance_from_network(None, inner.lock().await.cm())
+                    .await;
+                res
             }
             SafeKey::App(_) => {
                 // we're an app. We have no balance made at this key (yet in general)
                 // so we want to check our owner's balance.
                 // TODO: Apps should have their own keys w/ loaded amounts.
                 // ownership / perms should come down to keys on a wallet... (how would this look vault side?)
-                self.transfer_actor()
+                let res = self
+                    .transfer_actor()
                     .await
                     .ok_or(CoreError::from("No TransferActor found for app client."))?
-                    .get_balance_from_network(Some(self.owner_key().await))
-                    .await
+                    .get_balance_from_network(Some(self.owner_key().await), inner.lock().await.cm())
+                    .await;
+                res
             }
         }
     }
 
     /// Put immutable data to the network.
-    async fn put_blob<D: Into<Blob> + Send>(&self, data: D) -> Result<(), CoreError>
+    async fn put_blob<D: Into<Blob> + Send>(&mut self, data: D) -> Result<(), CoreError>
     where
         Self: Sized + Send,
     {
         let blob: Blob = data.into();
         trace!("Put Blob at {:?}", blob.name());
 
+        let inner = &mut self.inner();
+
         let mut actor = self
             .transfer_actor()
             .await
             .ok_or(CoreError::from("No TransferActor found for client."))?;
 
-        actor.new_blob(blob).await
+        let res = actor.new_blob(blob, inner.lock().await.cm()).await;
+        res
     }
 
     /// Get immutable data from the network. If the data exists locally in the cache then it will be
@@ -359,7 +351,7 @@ pub trait Client: Clone + Send + Sync {
     }
 
     /// Delete unpublished immutable data from the network.
-    async fn del_unpub_blob(&self, name: XorName) -> Result<(), CoreError>
+    async fn del_unpub_blob(&mut self, name: XorName) -> Result<(), CoreError>
     where
         Self: Sized,
     {
@@ -384,22 +376,27 @@ pub trait Client: Clone + Send + Sync {
             .await
             .ok_or(CoreError::from("No TransferActor found for client."))?;
 
-        actor.delete_blob(BlobAddress::Private(name)).await
+        let res = actor
+            .delete_blob(BlobAddress::Private(name), inner.lock().await.cm())
+            .await;
+        res
     }
 
     /// Put sequenced mutable data to the network
-    async fn put_seq_mutable_data(&self, data: SeqMap) -> Result<(), CoreError>
+    async fn put_seq_mutable_data(&mut self, data: SeqMap) -> Result<(), CoreError>
     where
         Self: Sized,
     {
         trace!("Put Sequenced Map at {:?}", data.name());
 
+        let inner = &mut self.inner();
         let mut actor = self
             .transfer_actor()
             .await
             .ok_or(CoreError::from("No TransferActor found for client."))?;
 
-        actor.new_map(Map::Seq(data)).await
+        let res = actor.new_map(Map::Seq(data), inner.lock().await.cm()).await;
+        res
     }
 
     /// Fetch unpublished mutable data from the network
@@ -508,7 +505,7 @@ pub trait Client: Clone + Send + Sync {
 
     /// Mutates sequenced `Map` entries in bulk
     async fn mutate_seq_map_entries(
-        &self,
+        &mut self,
         name: XorName,
         tag: u64,
         actions: MapSeqEntryActions,
@@ -521,17 +518,21 @@ pub trait Client: Clone + Send + Sync {
         let map_actions = MapEntryActions::Seq(actions);
         let address = MapAddress::Seq { name, tag };
 
+        let inner = &mut self.inner();
         let mut actor = self
             .transfer_actor()
             .await
             .ok_or(CoreError::from("No TransferActor found for client."))?;
 
-        actor.edit_map_entries(address, map_actions).await
+        let res = actor
+            .edit_map_entries(address, map_actions, inner.lock().await.cm())
+            .await;
+        res
     }
 
     /// Mutates unsequenced `Map` entries in bulk
     async fn mutate_unseq_map_entries(
-        &self,
+        &mut self,
         name: XorName,
         tag: u64,
         actions: MapUnseqEntryActions,
@@ -544,12 +545,16 @@ pub trait Client: Clone + Send + Sync {
         let map_actions = MapEntryActions::Unseq(actions);
         let address = MapAddress::Unseq { name, tag };
 
+        let inner = &mut self.inner();
         let mut actor = self
             .transfer_actor()
             .await
             .ok_or(CoreError::from("No TransferActor found for client."))?;
 
-        actor.edit_map_entries(address, map_actions).await
+        let res = actor
+            .edit_map_entries(address, map_actions, inner.lock().await.cm())
+            .await;
+        res
     }
 
     /// Get a shell (bare bones) version of `Map` from the network.
@@ -762,7 +767,7 @@ pub trait Client: Clone + Send + Sync {
     //
     /// Store Private Sequence Data into the Network
     async fn store_private_sequence(
-        &self,
+        &mut self,
         name: XorName,
         tag: u64,
         owner: PublicKey,
@@ -774,27 +779,25 @@ pub trait Client: Clone + Send + Sync {
         let _ = data.set_private_permissions(permissions)?;
         let _ = data.set_owner(owner);
 
+        let inner = &mut self.inner();
         let mut actor = self
             .transfer_actor()
             .await
             .ok_or(CoreError::from("No TransferActor found for client."))?;
 
-        actor.new_sequence(data.clone()).await?;
+        let _res = actor
+            .new_sequence(data.clone(), inner.lock().await.cm())
+            .await?;
 
         // Store in local Sequence CRDT replica
-        let _ = self
-            .inner()
-            .lock()
-            .await
-            .sequence_cache
-            .put(*data.address(), data);
+        let _ = inner.lock().await.sequence_cache.put(*data.address(), data);
 
         Ok(address)
     }
 
     /// Store Public Sequence Data into the Network
     async fn store_pub_sequence(
-        &self,
+        &mut self,
         name: XorName,
         tag: u64,
         owner: PublicKey,
@@ -806,13 +809,16 @@ pub trait Client: Clone + Send + Sync {
         let _ = data.set_pub_permissions(permissions)?;
         let _ = data.set_owner(owner);
 
+        let inner = &mut self.inner();
         //we can send the mutation to the network's replicas
         let mut actor = self
             .transfer_actor()
             .await
             .ok_or(CoreError::from("No TransferActor found for client."))?;
 
-        actor.new_sequence(data.clone()).await?;
+        let _res = actor
+            .new_sequence(data.clone(), inner.lock().await.cm())
+            .await?;
 
         // Store in local Sequence CRDT replica
         let _ = self
@@ -892,7 +898,7 @@ pub trait Client: Clone + Send + Sync {
 
     /// Append to Sequence Data
     async fn sequence_append(
-        &self,
+        &mut self,
         address: SequenceAddress,
         entry: SequenceEntry,
     ) -> Result<(), CoreError> {
@@ -908,9 +914,9 @@ pub trait Client: Clone + Send + Sync {
         // We can now append the entry to the Sequence
         let op = sequence.append(entry);
 
+        let inner = &mut self.inner();
         // Update the local Sequence CRDT replica
-        let _ = self
-            .inner()
+        let _ = inner
             .lock()
             .await
             .sequence_cache
@@ -922,7 +928,8 @@ pub trait Client: Clone + Send + Sync {
             .ok_or(CoreError::from("No TransferActor found for client."))?;
 
         // Finally we can send the mutation to the network's replicas
-        actor.append_to_sequence(op).await
+        let res = actor.append_to_sequence(op, inner.lock().await.cm()).await;
+        res
     }
 
     /// Get the set of Permissions of a Public Sequence.
@@ -986,7 +993,7 @@ pub trait Client: Clone + Send + Sync {
 
     /// Set permissions to Public Sequence Data
     async fn sequence_set_pub_permissions(
-        &self,
+        &mut self,
         address: SequenceAddress,
         permissions: BTreeMap<SequenceUser, SequencePubUserPermissions>,
     ) -> Result<(), CoreError> {
@@ -1003,10 +1010,9 @@ pub trait Client: Clone + Send + Sync {
 
         // We can now set the new permissions to the Sequence
         let op = sequence.set_pub_permissions(permissions)?;
-
+        let inner = &mut self.inner();
         // Update the local Sequence CRDT replica
-        let _ = self
-            .inner()
+        let _ = inner
             .lock()
             .await
             .sequence_cache
@@ -1018,12 +1024,15 @@ pub trait Client: Clone + Send + Sync {
             .ok_or(CoreError::from("No TransferActor found for client."))?;
 
         // Finally we can send the mutation to the network's replicas
-        actor.edit_sequence_public_perms(op).await
+        let res = actor
+            .edit_sequence_public_perms(op, inner.lock().await.cm())
+            .await;
+        res
     }
 
     /// Set permissions to Private Sequence Data
     async fn sequence_set_private_permissions(
-        &self,
+        &mut self,
         address: SequenceAddress,
         permissions: BTreeMap<PublicKey, SequencePrivUserPermissions>,
     ) -> Result<(), CoreError> {
@@ -1041,10 +1050,9 @@ pub trait Client: Clone + Send + Sync {
 
         // We can now set the new permissions to the Sequence
         let op = sequence.set_private_permissions(permissions)?;
-
+        let inner = &mut self.inner();
         // Update the local Sequence CRDT replica
-        let _ = self
-            .inner()
+        let _ = inner
             .lock()
             .await
             .sequence_cache
@@ -1056,7 +1064,10 @@ pub trait Client: Clone + Send + Sync {
             .ok_or(CoreError::from("No TransferActor found for client."))?;
 
         // Finally we can send the mutation to the network's replicas
-        actor.edit_sequence_private_perms(op).await
+        let res = actor
+            .edit_sequence_private_perms(op, inner.lock().await.cm())
+            .await;
+        res
     }
 
     /// Get the owner of a Sequence.
@@ -1077,7 +1088,7 @@ pub trait Client: Clone + Send + Sync {
 
     /// Set the new owner of a Sequence Data
     async fn sequence_set_owner(
-        &self,
+        &mut self,
         address: SequenceAddress,
         owner: PublicKey,
     ) -> Result<(), CoreError> {
@@ -1094,7 +1105,7 @@ pub trait Client: Clone + Send + Sync {
 
         // We can now set the new owner to the Sequence
         let op = sequence.set_owner(owner);
-
+        let inner = &mut self.inner();
         // Update the local Sequence CRDT replica
         let _ = self
             .inner()
@@ -1109,24 +1120,27 @@ pub trait Client: Clone + Send + Sync {
             .ok_or(CoreError::from("No TransferActor found for client."))?;
 
         // Finally we can send the mutation to the network's replicas
-        actor.set_sequence_owner(op).await
+        let res = actor.set_sequence_owner(op, inner.lock().await.cm()).await;
+        res
     }
 
     /// Delete Private Sequence Data from the Network
-    async fn delete_sequence(&self, address: SequenceAddress) -> Result<(), CoreError> {
+    async fn delete_sequence(&mut self, address: SequenceAddress) -> Result<(), CoreError> {
         trace!("Delete Private Sequence Data {:?}", address.name());
-
+        let inner = &mut self.inner();
         // Delete it from local Sequence CRDT replica
-        let _ = self.inner().lock().await.sequence_cache.pop(&address);
+        let _ = inner.lock().await.sequence_cache.pop(&address);
 
         trace!("Deleted local Private Sequence {:?}", address.name());
-
         let mut actor = self
             .transfer_actor()
             .await
             .ok_or(CoreError::from("No TransferActor found for client."))?;
 
-        actor.delete_sequence(address).await
+        let res = actor
+            .delete_sequence(address, inner.lock().await.cm())
+            .await;
+        res
     }
 
     // ========== END of Sequence Data functions =========
@@ -1149,7 +1163,7 @@ pub trait Client: Clone + Send + Sync {
 
     /// Updates or inserts a permissions set for a user
     async fn set_map_user_permissions(
-        &self,
+        &mut self,
         address: MapAddress,
         user: PublicKey,
         permissions: MapPermissionSet,
@@ -1159,20 +1173,21 @@ pub trait Client: Clone + Send + Sync {
         Self: Sized,
     {
         trace!("SetMapUserPermissions for {:?}", address);
-
+        let inner = &mut self.inner();
         let mut actor = self
             .transfer_actor()
             .await
             .ok_or(CoreError::from("No TransferActor found for client."))?;
 
-        actor
-            .set_map_user_perms(address, user, permissions, version)
-            .await
+        let res = actor
+            .set_map_user_perms(address, user, permissions, version, inner.lock().await.cm())
+            .await;
+        res
     }
 
     /// Updates or inserts a permissions set for a user
     async fn del_map_user_permissions(
-        &self,
+        &mut self,
         address: MapAddress,
         user: PublicKey,
         version: u64,
@@ -1181,13 +1196,16 @@ pub trait Client: Clone + Send + Sync {
         Self: Sized,
     {
         trace!("DelMapUserPermissions for {:?}", address);
-
+        let inner = &mut self.inner();
         let mut actor = self
             .transfer_actor()
             .await
             .ok_or(CoreError::from("No TransferActor found for client."))?;
 
-        actor.delete_map_user_perms(address, user, version).await
+        let res = actor
+            .delete_map_user_perms(address, user, version, inner.lock().await.cm())
+            .await;
+        res
     }
 
     /// Sends an ownership transfer request.
@@ -1204,24 +1222,30 @@ pub trait Client: Clone + Send + Sync {
 
     /// Set the coin balance to a specific value for testing
     #[cfg(any(test, feature = "testing"))]
-    async fn test_simulate_farming_payout_client(&self, amount: Money) -> Result<(), CoreError>
+    async fn test_simulate_farming_payout_client(&mut self, amount: Money) -> Result<(), CoreError>
     where
         Self: Sized,
     {
-        debug!(
+        trace!(
             "Set the coin balance of {:?} to {:?}",
             self.public_key().await,
             amount,
         );
 
+        let inner = &mut self.inner();
         let mut actor = self
             .transfer_actor()
             .await
             .ok_or(CoreError::from("No TransferActor found for client."))?;
 
-        actor
-            .trigger_simulated_farming_payout(self.public_key().await, amount)
-            .await
+        let res = actor
+            .trigger_simulated_farming_payout(
+                self.public_key().await,
+                amount,
+                inner.lock().await.cm(),
+            )
+            .await;
+        res
     }
 }
 
@@ -1232,9 +1256,7 @@ where
 {
     let full_id = SafeKey::client(identity.clone());
 
-    let (net_tx, _net_rx) = mpsc::unbounded();
-
-    let mut cm = attempt_bootstrap(&Config::new().quic_p2p, &net_tx, full_id.clone()).await?;
+    let mut cm = attempt_bootstrap(&Config::new().quic_p2p, full_id.clone()).await?;
 
     func(&mut cm, &full_id)
 }
@@ -1245,12 +1267,10 @@ pub async fn test_create_balance(owner: &ClientFullId, amount: Money) -> Result<
 
     let full_id = SafeKey::client(owner.clone());
 
-    let (net_tx, _net_rx) = mpsc::unbounded();
-
-    let cm = attempt_bootstrap(&Config::new().quic_p2p, &net_tx, full_id.clone()).await?;
+    let mut cm = attempt_bootstrap(&Config::new().quic_p2p, full_id.clone()).await?;
 
     // actor starts with 10....
-    let mut actor = TransferActor::new(full_id.clone(), cm).await?;
+    let mut actor = TransferActor::new(full_id.clone(), &mut cm).await?;
 
     let public_id = full_id.public_id();
 
@@ -1263,7 +1283,7 @@ pub async fn test_create_balance(owner: &ClientFullId, amount: Money) -> Result<
     let public_key = full_id.public_key();
 
     actor
-        .trigger_simulated_farming_payout(public_key, amount)
+        .trigger_simulated_farming_payout(public_key, amount, &mut cm)
         .await?;
 
     Ok(())
@@ -1298,7 +1318,7 @@ pub trait AuthActions: Client + Clone + 'static {
 
     /// Adds a new authorised key.
     async fn ins_auth_key(
-        &self,
+        &mut self,
         key: PublicKey,
         permissions: AppPermissions,
         version: u64,
@@ -1307,41 +1327,47 @@ pub trait AuthActions: Client + Clone + 'static {
         Self: Sized,
     {
         trace!("InsAuthKey ({:?})", key);
-
-        self.transfer_actor()
+        let inner = &mut self.inner();
+        let res = self
+            .transfer_actor()
             .await
             .ok_or(CoreError::from("No TransferActor found for client."))?
-            .insert_auth_key(key, permissions, version)
-            .await
+            .insert_auth_key(key, permissions, version, inner.lock().await.cm())
+            .await;
+        res
     }
 
     /// Removes an authorised key.
-    async fn del_auth_key(&self, key: PublicKey, version: u64) -> Result<(), CoreError>
+    async fn del_auth_key(&mut self, key: PublicKey, version: u64) -> Result<(), CoreError>
     where
         Self: Sized,
     {
         trace!("DelAuthKey ({:?})", key);
-
-        self.transfer_actor()
+        let inner = &mut self.inner();
+        let res = self
+            .transfer_actor()
             .await
             .ok_or(CoreError::from("No TransferActor found for client."))?
-            .delete_auth_key(key, version)
-            .await
+            .delete_auth_key(key, version, inner.lock().await.cm())
+            .await;
+        res
     }
 
     /// Delete Map from network
-    async fn delete_map(&self, address: MapAddress) -> Result<(), CoreError>
+    async fn delete_map(&mut self, address: MapAddress) -> Result<(), CoreError>
     where
         Self: Sized,
     {
         trace!("Delete entire Mutable Data at {:?}", address);
 
+        let inner = &mut self.inner();
         let mut actor = self
             .transfer_actor()
             .await
             .ok_or(CoreError::from("No TransferActor found for client."))?;
 
-        actor.delete_map(address).await
+        let res = actor.delete_map(address, inner.lock().await.cm()).await;
+        res
     }
 }
 
@@ -1409,7 +1435,6 @@ impl Inner {
 /// After a maximum of three attempts if the boostrap process still fails, then an error is returned.
 pub async fn attempt_bootstrap(
     qp2p_config: &QuicP2pConfig,
-    net_tx: &NetworkTx,
     safe_key: SafeKey,
 ) -> Result<ConnectionManager, CoreError> {
     let mut attempts: u32 = 0;
@@ -1449,7 +1474,7 @@ mod tests {
     // Test putting and getting pub blob.
     #[tokio::test]
     async fn pub_blob_test() -> Result<(), CoreError> {
-        let client = random_client()?;
+        let mut client = random_client()?;
         // The `random_client()` initializes the client with 10 money.
         let start_bal = unwrap!(Money::from_str("10"));
 
@@ -1495,10 +1520,10 @@ mod tests {
         let start_bal = unwrap!(Money::from_str("10"));
         println!("blob_Test_______pre client_");
 
-        let client = random_client()?;
+        let mut client = random_client()?;
         println!("blob_Test_______post client_");
 
-        let client9 = client.clone();
+        let mut client9 = client.clone();
 
         let value = generate_random_vector::<u8>(10);
         let data = PrivateBlob::new(value.clone(), client.public_key().await);
@@ -1559,7 +1584,7 @@ mod tests {
     // 3. Fetch the entire. data object and verify
     #[tokio::test]
     pub async fn unseq_map_test() -> Result<(), CoreError> {
-        let client = random_client()?;
+        let mut client = random_client()?;
 
         let name = XorName(rand::random());
         let tag = 15001;
@@ -1604,7 +1629,7 @@ mod tests {
     // 3. Fetch the entire. data object and verify
     #[tokio::test]
     pub async fn seq_map_test() -> Result<(), CoreError> {
-        let client = random_client()?;
+        let mut client = random_client()?;
 
         let name = XorName(rand::random());
         let tag = 15001;
@@ -1653,7 +1678,7 @@ mod tests {
     // 2. Try getting the data object. It should panic
     #[tokio::test]
     pub async fn del_seq_map_test() -> Result<(), CoreError> {
-        let client = random_client()?;
+        let mut client = random_client()?;
         let name = XorName(rand::random());
         let tag = 15001;
         let mapref = MapAddress::Seq { name, tag };
@@ -1679,7 +1704,7 @@ mod tests {
     // 2. Try getting the data object. It should panic
     #[tokio::test]
     pub async fn del_unseq_map_test() -> Result<(), CoreError> {
-        let client = random_client()?;
+        let mut client = random_client()?;
         let name = XorName(rand::random());
         let tag = 15001;
         let mapref = MapAddress::Unseq { name, tag };
@@ -1713,9 +1738,9 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn money_permissions() {
-        let client = random_client().unwrap();
+        let mut client = random_client().unwrap();
         let wallet_a_addr = client.public_key().await;
-        let random_client_key = *ClientFullId::new_bls(&mut rand::thread_rng())
+        let random_client_key = *ClientFullId::new_bls(&mut thread_rng())
             .public_id()
             .public_key();
         let res = client
@@ -1726,7 +1751,7 @@ mod tests {
             res => panic!("Unexpected result: {:?}", res),
         }
 
-        let client = random_client().unwrap();
+        let mut client = random_client().unwrap();
         let res = client.get_balance(None).await;
         // Subtract to cover the cost of inserting the login packet
         let expected_amt = unwrap!(Money::from_str("10")
@@ -1759,12 +1784,12 @@ mod tests {
     // 5. Try to create a balance using an inexistent wallet. This should fail.
     #[tokio::test]
     async fn random_clients() {
-        let client = random_client().unwrap();
+        let mut client = random_client().unwrap();
         // starter amount after creating login packet
         let wallet1 = client.public_key().await;
         let init_bal = unwrap!(Money::from_str("490.0")); // 500 in total
 
-        let client2 = random_client().unwrap();
+        let mut client2 = random_client().unwrap();
 
         let bls_pk = client2.public_id().await.public_key();
 
@@ -1810,7 +1835,7 @@ mod tests {
         assert_eq!(balance, expected);
         let random_pk = gen_bls_keypair().public_key();
 
-        let nonexistent_client = random_client().unwrap();
+        let mut nonexistent_client = random_client().unwrap();
 
         let res = nonexistent_client
             .create_balance(None, random_pk, unwrap!(Money::from_str("100.0")))
@@ -1833,7 +1858,7 @@ mod tests {
     // 8. Set the client's balance to zero and try to put data. It should fail.
     #[tokio::test]
     async fn money_balance_transfer() {
-        let client = random_client().unwrap();
+        let mut client = random_client().unwrap();
 
         // let wallet1: XorName =
         let _owner_key = client.owner_key().await;
@@ -1846,7 +1871,7 @@ mod tests {
         let balance = client.get_balance(None).await.unwrap();
         assert_eq!(balance, unwrap!(Money::from_str("109.999999999"))); // 10 coins added automatically w/ farming sim on account creation. 1 nano paid.
 
-        let client = random_client().unwrap();
+        let mut client = random_client().unwrap();
         let init_bal = unwrap!(Money::from_str("10"));
         let orig_balance = client.get_balance(None).await.unwrap();
         let _ = client
@@ -1900,7 +1925,7 @@ mod tests {
         let tag = 15001;
         let mapref = MapAddress::Unseq { name, tag };
 
-        let client = random_client()?;
+        let mut client = random_client()?;
         let data = UnseqMap::new_with_data(
             name,
             tag,
@@ -1911,7 +1936,7 @@ mod tests {
 
         client.put_unseq_mutable_data(data).await?;
 
-        let client = random_client()?;
+        let mut client = random_client()?;
         let res = client.delete_map(mapref).await;
         match res {
             Err(CoreError::DataError(SndError::AccessDenied)) => (),
@@ -1924,7 +1949,7 @@ mod tests {
     #[tokio::test]
     pub async fn map_cannot_initially_put_data_with_another_owner_than_current_client(
     ) -> Result<(), CoreError> {
-        let client = random_client()?;
+        let mut client = random_client()?;
         let mut permissions: BTreeMap<_, _> = Default::default();
         let permission_set = MapPermissionSet::new()
             .allow(MapAction::Read)
@@ -1972,7 +1997,7 @@ mod tests {
     // 4. Delete a user's permissions from the permission set and verify the deletion.
     #[tokio::test]
     pub async fn map_can_modify_permissions_test() -> Result<(), CoreError> {
-        let client = random_client()?;
+        let mut client = random_client()?;
         let name = XorName(rand::random());
         let tag = 15001;
         let mut permissions: BTreeMap<_, _> = Default::default();
@@ -2031,7 +2056,7 @@ mod tests {
     // 4. Fetch a value for a particular key and verify
     #[tokio::test]
     pub async fn map_mutations_test() -> Result<(), CoreError> {
-        let client = random_client()?;
+        let mut client = random_client()?;
 
         let name = XorName(rand::random());
         let tag = 15001;
@@ -2119,7 +2144,7 @@ mod tests {
             Err(err) => panic!("Unexpected error: {:?}", err),
         };
 
-        let client = random_client()?;
+        let mut client = random_client()?;
         let name = XorName(rand::random());
         let tag = 15001;
         let mut permissions: BTreeMap<_, _> = Default::default();
@@ -2176,7 +2201,7 @@ mod tests {
     // // 2. Without a client object, try to get the balance, create new wallets and transfer safecoin.
     // #[tokio::test]
     // pub async fn wallet_transactions_without_client() -> Result<(), CoreError> {
-    //     let client_id = gen_client_id();
+    //     let mut client_id = gen_client_id();
 
     //     test_create_balance(&client_id, unwrap!(Coins::from_str("50"))).await?;
 
@@ -2192,7 +2217,7 @@ mod tests {
     //     let txn2 = wallet_transfer_coins(&client_id, new_wallet, ten_coins, None).await?;
     //     assert_eq!(txn2.amount, ten_coins);
 
-    //     let client_balance = wallet_get_balance(&client_id).await?;
+    //     let mut client_balance = wallet_get_balance(&client_id).await?;
     //     let expected = unwrap!(Coins::from_str("30"));
     //     let expected = unwrap!(expected.checked_sub(COST_OF_PUT));
     //     assert_eq!(client_balance, expected);
@@ -2205,7 +2230,7 @@ mod tests {
 
     #[tokio::test]
     pub async fn blob_deletions_should_cost_put_price() -> Result<(), CoreError> {
-        let client = random_client()?;
+        let mut client = random_client()?;
 
         let blob = PrivateBlob::new(generate_random_vector::<u8>(10), client.public_key().await);
         let blob_address = *blob.name();
@@ -2226,7 +2251,7 @@ mod tests {
     pub async fn map_deletions_should_cost_put_price() -> Result<(), CoreError> {
         let name = XorName(rand::random());
         let tag = 10;
-        let client = random_client()?;
+        let mut client = random_client()?;
 
         let map = UnseqMap::new(name, tag, client.public_key().await);
         client.put_unseq_mutable_data(map).await?;
@@ -2248,7 +2273,7 @@ mod tests {
     pub async fn sequence_deletions_should_cost_put_price() -> Result<(), CoreError> {
         let name = XorName(rand::random());
         let tag = 10;
-        let client = random_client()?;
+        let mut client = random_client()?;
         let owner = client.public_key().await;
         let perms = BTreeMap::<PublicKey, SequencePrivUserPermissions>::new();
         let sequence_address = client
@@ -2270,7 +2295,7 @@ mod tests {
 
     #[tokio::test]
     pub async fn sequence_basics_test() -> Result<(), CoreError> {
-        let client = random_client()?;
+        let mut client = random_client()?;
 
         let name = XorName(rand::random());
         let tag = 15000;
@@ -2310,7 +2335,7 @@ mod tests {
 
     #[tokio::test]
     pub async fn sequence_private_permissions_test() -> Result<(), CoreError> {
-        let client = random_client()?;
+        let mut client = random_client()?;
 
         let name = XorName(rand::random());
         let tag = 15000;
@@ -2388,7 +2413,7 @@ mod tests {
 
     #[tokio::test]
     pub async fn sequence_pub_permissions_test() -> Result<(), CoreError> {
-        let client = random_client()?;
+        let mut client = random_client()?;
 
         let name = XorName(rand::random());
         let tag = 15000;
@@ -2479,7 +2504,7 @@ mod tests {
     pub async fn sequence_append_test() -> Result<(), CoreError> {
         let name = XorName(rand::random());
         let tag = 10;
-        let client = random_client()?;
+        let mut client = random_client()?;
 
         let owner = client.public_key().await;
         let mut perms = BTreeMap::<SequenceUser, SequencePubUserPermissions>::new();
@@ -2517,7 +2542,7 @@ mod tests {
     pub async fn sequence_owner_test() -> Result<(), CoreError> {
         let name = XorName(rand::random());
         let tag = 10;
-        let client = random_client()?;
+        let mut client = random_client()?;
 
         let owner = client.public_key().await;
         let mut perms = BTreeMap::<PublicKey, SequencePrivUserPermissions>::new();
@@ -2548,7 +2573,7 @@ mod tests {
 
     #[tokio::test]
     pub async fn sequence_can_delete_private_test() -> Result<(), CoreError> {
-        let client = random_client()?;
+        let mut client = random_client()?;
 
         let name = XorName(rand::random());
         let tag = 15000;
@@ -2583,7 +2608,7 @@ mod tests {
 
     #[tokio::test]
     pub async fn sequence_cannot_delete_public_test() -> Result<(), CoreError> {
-        let client = random_client()?;
+        let mut client = random_client()?;
 
         let name = XorName(rand::random());
         let tag = 15000;
@@ -2649,7 +2674,7 @@ fn wrap_client_auth_query(auth_query: AuthQuery) -> Query {
 // pub async fn deletions_should_be_free() -> Result<(), CoreError> {
 //     let name = XorName(rand::random());
 //     let tag = 10;
-//     let client = random_client()?;
+//     let mut client = random_client()?;
 
 //     let blob = PrivateBlob::new(
 //         unwrap!(generate_random_vector::<u8>(10)),
