@@ -32,24 +32,29 @@ use crate::errors::CoreError;
 
 use crdts::Dot;
 use futures::lock::Mutex;
-use log::trace;
+use log::{error, trace, warn};
 use lru::LruCache;
 use quic_p2p::Config as QuicP2pConfig;
 use safe_nd::{
     AppPermissions, AuthQuery, Blob, BlobAddress, BlobRead, ClientFullId, Cmd, Data, DataQuery,
-    Map, MapAddress, MapEntries, MapEntryActions, MapPermissionSet, MapRead, MapSeqEntries,
-    MapSeqEntryActions, MapSeqValue, MapUnseqEntryActions, MapValue, MapValues, Message, MessageId,
-    Money, PublicBlob, PublicId, PublicKey, Query, QueryResponse, SeqMap, Sequence, SequenceAction,
-    SequenceAddress, SequenceEntries, SequenceEntry, SequenceIndex, SequenceOwner,
-    SequencePrivUserPermissions, SequencePrivatePermissions, SequencePubUserPermissions,
-    SequencePublicPermissions, SequenceRead, SequenceUser, SequenceUserPermissions, UnseqMap,
+    DebitAgreementProof, Map, MapAddress, MapEntries, MapEntryActions, MapPermissionSet, MapRead,
+    MapSeqEntries, MapSeqEntryActions, MapSeqValue, MapUnseqEntryActions, MapValue, MapValues,
+    Message, MessageId, Money, MsgEnvelope, PublicBlob, PublicId, PublicKey, Query, QueryResponse,
+    SeqMap, Sequence, SequenceAction, SequenceAddress, SequenceEntries, SequenceEntry,
+    SequenceIndex, SequenceOwner, SequencePrivUserPermissions, SequencePrivatePermissions,
+    SequencePubUserPermissions, SequencePublicPermissions, SequenceRead, SequenceUser,
+    SequenceUserPermissions, TransferId, UnseqMap,
 };
 
 use std::sync::Arc;
 
 use xor_name::XorName;
 
+use bincode::deserialize;
 use rand::{thread_rng, Rng};
+use safe_transfers::TransferActor;
+use std::collections::HashMap;
+use std::str::FromStr;
 use std::{collections::HashSet, net::SocketAddr};
 use threshold_crypto::{PublicKeySet, SecretKey};
 
@@ -74,7 +79,6 @@ pub struct Client {
     blob_cache: Arc<Mutex<LruCache<BlobAddress, Blob>>>,
     /// Sequence CRDT replica
     sequence_cache: Arc<Mutex<LruCache<SequenceAddress, Sequence>>>,
-
     transfer_actor: Arc<Mutex<SafeTransferActor<ClientTransferValidator>>>,
     replicas_pk_set: PublicKeySet,
     simulated_farming_payout_dot: Dot<PublicKey>,
@@ -136,10 +140,61 @@ impl Client {
             sequence_cache: Arc::new(Mutex::new(LruCache::new(SEQUENCE_CRDT_REPLICA_SIZE))),
         };
 
+        #[cfg(feature = "simulated-payouts")]
+        {
+            // we're testing, and currently a lot of tests expect 10 money to start
+            let _ = full_client
+                .trigger_simulated_farming_payout(Money::from_str("10")?)
+                .await?;
+        }
+
         full_client.get_history();
+
+        //Start listening for Events
+        full_client.listen().await;
 
         Ok(full_client)
     }
+    /*
+        async fn listen(&mut self) {
+            let (tx, rx) = std::sync::mpsc::channel();
+            loop {
+                self.connection_manager.listen(tx.clone()).await;
+                match rx.recv() {
+                    Ok(bytes) => {
+                        let event = deserialize::<MsgEnvelope>(&bytes);
+                        match event {
+                            Ok(envelope) => match envelope.message {
+                                Message::Event { event, .. } => {
+                                    match self.handle_validation_event(event).await {
+                                        Ok(proof) => {
+                                            match proof {
+                                                Some(debit) => { let _ = self.debit_cache.insert(debit.id(), debit); }
+                                                None => { warn!("Handled a validation Event") }
+                                            }
+                                        },
+                                        Err(e) => error!("Unexpected error while handling validation: {:?}", e),
+                                    }
+                                }
+                                m => error!("Unexpected message found while listening: {:?}", m),
+                            },
+                            Err(e) => error!("Error deserializing message while listening: {:?}", e),
+                        }
+                    }
+                    Err(e) => error!("Error listening to Events from Quic-p2p: {:?}", e),
+                }
+            }
+        }
+
+        async fn check_debit_cache(&mut self, id: TransferId) -> DebitAgreementProof {
+            loop {
+                match self.debit_cache.get(&id) {
+                    Some(proof) => return proof.clone(),
+                    None => (),
+                }
+            }
+        }
+    */
 
     #[cfg(feature = "simulated-payouts")]
     pub async fn new_no_initial_balance(sk: Option<SecretKey>) -> Result<Self, CoreError> {
@@ -197,18 +252,6 @@ impl Client {
     async fn full_id(&self) -> ClientFullId {
         self.full_id.clone()
     }
-
-    // async fn public_encryption_key(&mut self) -> threshold_crypto::PublicKey {
-    //     self.keys.enc_public_key
-    // }
-
-    // async fn secret_encryption_key(&mut self) -> shared_box::SecretKey {
-    //     self.keys.enc_secret_key.clone()
-    // }
-
-    // async fn secret_symmetric_key(&mut self) -> shared_secretbox::Key {
-    //     self.keys.enc_key.clone()
-    // }
 
     /// Return the client's public ID.
     pub async fn public_id(&self) -> PublicId {

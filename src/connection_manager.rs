@@ -16,6 +16,7 @@ use safe_nd::{
     BlsProof, ClientFullId, HandshakeRequest, HandshakeResponse, Message, MsgEnvelope, MsgSender,
     Proof, QueryResponse,
 };
+use std::sync::mpsc::Sender;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 /// Initialises `QuicP2p` instance which can bootstrap to the network, establish
@@ -113,11 +114,11 @@ impl ConnectionManager {
         let responses = join_all(tasks).await;
 
         // Let's figure out what's the value which is in the majority of responses obtained
-        let mut votes_map = HashMap::<QueryResponse, usize>::default();
-        let mut winner: (Option<QueryResponse>, usize) = (None, 0);
+        let mut votes_map = HashMap::<MsgEnvelope, usize>::default();
+        let mut winner: (Option<MsgEnvelope>, usize) = (None, 0);
         for join_result in responses.into_iter() {
             if let Ok(response_result) = join_result {
-                let response: QueryResponse = response_result.map_err(|err| {
+                let response: MsgEnvelope = response_result.map_err(|err| {
                     CoreError::from(format!(
                         "Failed to obtain a response from the network: {}",
                         err
@@ -140,9 +141,20 @@ impl ConnectionManager {
             winner.1,
             winner.0
         );
-        winner.0.ok_or_else(|| {
-            CoreError::from(format!("Failed to obtain a response from the network."))
-        })
+        winner.0.map_or_else(
+            || {
+                Err(CoreError::from(format!(
+                    "Failed to obtain a response from the network."
+                )))
+            },
+            |res| match res.message {
+                Message::QueryResponse { response, .. } => Ok(response),
+                m => Err(CoreError::from(format!(
+                    "Unexpected Response Message type while sending query: {:?}",
+                    m
+                ))),
+            },
+        )
     }
 
     // Private helpers
@@ -250,4 +262,24 @@ impl ConnectionManager {
         trace!("Connected to {} Elders.", self.elders.len());
         Ok(())
     }
+
+    /*
+    /// Listen for incoming events(messages) via IncomingConnections.
+    pub async fn listen(&mut self, tx: Sender<Bytes>) {
+        match self.quic_p2p.listen() {
+            Ok(mut incoming) => match (incoming.next()).await {
+                Some(mut msg) => match (msg.next()).await {
+                    Some(bytes) => {
+                        let _ = tx.send(bytes).unwrap();
+                    }
+                    None => info!("No Incoming Messages"),
+                },
+                None => info!("No Incoming Events"),
+            },
+            Err(e) => {
+                error!("Error from Quic-p2p on listening: {:?}", e);
+            }
+        }
+    }
+     */
 }

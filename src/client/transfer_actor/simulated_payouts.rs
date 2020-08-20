@@ -42,7 +42,6 @@ impl Client {
 
         let pub_id = self.full_id.public_id();
 
-        let _bootstrapped = self.connection_manager.bootstrap().await;
         let _ = self.connection_manager.send_cmd(&message).await?;
 
         // If we're getting the payout for our own actor, update it here

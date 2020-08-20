@@ -21,7 +21,6 @@ impl Client {
 
         let message = Self::create_query_message(keys_query_msg);
 
-        cm.bootstrap().await?;
         let res = cm.send_query(&message).await?;
 
         match res {
