@@ -207,7 +207,11 @@ impl Client {
             }))?;
 
         let payment_proof: DebitAgreementProof = self
-            .await_validation(&transfer_message, signed_transfer.id())
+            .await_validation(
+                &transfer_message,
+                self.replicas_pk_set.clone(),
+                signed_transfer.id(),
+            )
             .await?;
 
         debug!("Payment proof retrieved");
@@ -240,6 +244,7 @@ impl Client {
     async fn await_validation(
         &mut self,
         message: &Message,
+        pk_set: PublicKeySet,
         _id: TransferId,
     ) -> Result<DebitAgreementProof, ClientError> {
         info!("Awaiting transfer validation");
@@ -249,7 +254,7 @@ impl Client {
         self.connection_manager
             .lock()
             .await
-            .send_transfer_validation(&message, sender)
+            .send_transfer_validation(&message, pk_set, sender)
             .await?;
 
         receiver.await.map_err(|error| {
