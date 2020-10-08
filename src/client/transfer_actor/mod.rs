@@ -298,15 +298,14 @@ mod tests {
     #[cfg(not(feature = "mock-network"))]
     async fn transfer_actor_creation_hydration_for_existing_balance() -> Result<(), ClientError> {
         let (sk, _pk) = shared_box::gen_bls_keypair();
-        let (sk2, _pk2) = shared_box::gen_bls_keypair();
 
-        let mut initial_actor = Client::new(Some(sk)).await?;
+        let mut initial_actor = Client::new(Some(sk.clone())).await?;
 
         let _ = initial_actor
             .trigger_simulated_farming_payout(Money::from_str("100")?)
             .await?;
 
-        match Client::new(Some(sk2)).await {
+        match Client::new(Some(sk)).await {
             Ok(mut client) => {
                 assert_eq!(
                     client.get_balance_from_network(None).await?,
