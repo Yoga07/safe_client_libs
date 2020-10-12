@@ -163,7 +163,7 @@ impl Client {
             }))?;
 
         let debit_proof: DebitAgreementProof = self
-            .await_validation(&message, self.replicas_pk_set.clone(), signed_transfer.id())
+            .await_validation(&message, signed_transfer.id())
             .await?;
 
         // Register the transfer on the network.
@@ -205,7 +205,8 @@ mod tests {
     use super::*;
     use crate::crypto::shared_box;
     use crate::utils::{generate_random_vector, test_utils::calculate_new_balance};
-    use sn_data_types::{Blob, Error as SndError, Money, PublicBlob};
+    use log::error;
+    use sn_data_types::{Blob, Error as SndError, Error, Money, PublicBlob};
     use std::str::FromStr;
 
     #[tokio::test]
@@ -266,7 +267,6 @@ mod tests {
         Ok(())
     }
 
-    // TODO: do we want to be able to send 0 transfer reqs? This should probably be an actor side check if not
     #[tokio::test]
     #[cfg(feature = "simulated-payouts")]
     async fn transfer_actor_cannot_send_0_money_req() -> Result<(), ClientError> {
@@ -275,11 +275,15 @@ mod tests {
         let mut client = Client::new(None).await?;
 
         // Send 0 Money to a random PK.
-        client
+        match client
             .send_money(PublicKey::Bls(random_pk), Money::from_str("0")?)
-            .await?;
+            .await
+        {
+            Err(ClientError::DataError(Error::Unexpected(_))) => (),
+            _result => error!("Unexpected error. Zero-Value Transfers should not pass"),
+        }
 
-        // Initial 10 Money on creation from farming simulation minus 1.
+        // Unchanged balances - local and network.
         assert_eq!(client.get_local_balance().await, Money::from_str("10")?);
 
         assert_eq!(client.get_balance().await?, Money::from_str("10")?);

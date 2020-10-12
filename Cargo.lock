@@ -1744,8 +1744,8 @@ dependencies = [
 
 [[package]]
 name = "sn_data_types"
-version = "0.11.18"
-source = "git+https://github.com/oetyng/sn_data_types.git?branch=senders#150b67122c24ba904d066f0a870b3f58a124b0fa"
+version = "0.11.21"
+source = "git+https://github.com/maidsafe/sn_data_types.git#61a630df5ff15425fb5f1779903abe4f6358ed78"
 dependencies = [
  "bincode",
  "crdts",
@@ -1767,7 +1767,7 @@ dependencies = [
 [[package]]
 name = "sn_transfers"
 version = "0.2.0"
-source = "git+https://github.com/maidsafe/sn_transfers.git#59a2bb39af50ad6c8867ad4b8fc5075e93c247df"
+source = "git+https://github.com/yoga07/sn_transfers.git?branch=fix-signature#9eae0f5fa24c1667cc053567e611f0476160947c"
 dependencies = [
  "bincode",
  "crdts",
