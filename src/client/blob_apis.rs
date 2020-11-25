@@ -122,6 +122,14 @@ impl Client {
         info!("Storing blob at given address: {:?}", the_blob.address());
 
         let is_pub = the_blob.is_pub();
+        let pub_key = if is_pub {
+            self.public_key().await
+        } else {
+            *the_blob
+                .owner()
+                .ok_or_else(|| ClientError::DataError(sn_data_types::Error::InvalidOwners))?
+        };
+
         let data_map = self.generate_data_map(&the_blob).await?;
 
         let serialised_data_map = serialize(&data_map)?;
@@ -129,9 +137,7 @@ impl Client {
             serialize(&DataTypeEncoding::Serialised(serialised_data_map))
                 .map_err(ClientError::from)?;
 
-        let blob_to_write = self
-            .pack(self.public_key().await, data_to_write_to_network, is_pub)
-            .await?;
+        let blob_to_write = self.pack(pub_key, data_to_write_to_network, is_pub).await?;
 
         let cmd = DataCmd::Blob(BlobWrite::New(blob_to_write.clone()));
 
@@ -321,7 +327,7 @@ pub mod exported_tests {
 
         let test_data = Blob::Private(PrivateBlob::new(value, pk)?);
         let res = client
-            // Get inexistent blob
+            // Get non-existent blob
             .get_blob(address, None, None)
             .await;
         match res {
@@ -330,20 +336,22 @@ pub mod exported_tests {
             Err(e) => panic!("Unexpected: {:?}", e),
         }
         // Put blob
-        let _ = client.store_blob(data.clone()).await?;
-        let res = client.store_blob(test_data.clone()).await;
-        match res {
-            Ok(_) => panic!("Unexpected Success: Validating owners should fail"),
-            Err(ClientError::DataError(SndError::InvalidOwners)) => (),
-            Err(e) => panic!("Unexpected: {:?}", e),
+        let stored_data = client.store_blob(data.clone()).await?;
+
+        // Assert that the blob was written
+        let mut fetched_data = client.get_blob(*stored_data.address(), None, None).await;
+        while fetched_data.is_err() {
+            fetched_data = client.get_blob(*stored_data.address(), None, None).await;
         }
 
-        let balance = client.get_balance().await?;
-        let expected_bal = calculate_new_balance(start_bal, Some(2), None);
-        assert_eq!(balance, expected_bal);
-        // Fetch blob
-        let fetched_data = client.get_blob(address, None, None).await?;
-        assert_eq!(*fetched_data.address(), address);
+        assert_eq!(*fetched_data?.address(), address);
+
+        // Try writing a PrivateBlob with a different owner
+        let res = client.store_blob(test_data.clone()).await?;
+        client
+            .expect_error(ClientError::DataError(SndError::InvalidOwners))
+            .await;
+
         Ok(())
     }
 
@@ -689,6 +697,8 @@ mod tests {
     async fn pub_blob_test() -> Result<(), ClientError> {
         exported_tests::pub_blob_test().await
     }
+}
+/*
 
     // Test putting, getting, and deleting unpub blob.
     #[tokio::test]
@@ -770,3 +780,4 @@ mod tests {
         exported_tests::create_and_retrieve_index_based().await
     }
 }
+*/
