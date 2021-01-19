@@ -88,7 +88,11 @@ impl ConnectionManager {
 
         // Bootstrap and send a handshake request to receive
         // the list of Elders we can then connect to
-        let elders_addrs = self.bootstrap_and_handshake().await?;
+        let mut elders_addrs = self.bootstrap_and_handshake().await?;
+
+        let mut rng = rand::thread_rng();
+        use rand::prelude::SliceRandom;
+        elders_addrs.shuffle(&mut rng);
 
         // Let's now connect to all Elders
         self.connect_to_elders(elders_addrs).await?;
@@ -286,7 +290,7 @@ impl ConnectionManager {
         let mut received_errors = 0;
 
         // 2/3 of known elders
-        let threshold: usize = (self.elders.len() as f32 / 2_f32).ceil() as usize;
+        let threshold: usize = (self.elders.len() as f32).ceil() as usize;
 
         trace!("Vote threshold is: {:?}", threshold);
         let mut winner: (Option<QueryResponse>, usize) = (None, threshold);
@@ -317,7 +321,7 @@ impl ConnectionManager {
                         *counter += 1;
 
                         // First, see if this latest response brings us above the threshold for any response
-                        if *counter > threshold {
+                        if *counter == threshold {
                             trace!("Enough votes to be above response threshold");
 
                             winner = (Some(response.clone()), *counter);
@@ -444,7 +448,7 @@ impl ConnectionManager {
         let public_key = self.keypair.public_key();
         let handshake = HandshakeRequest::Bootstrap(public_key);
         let msg = Bytes::from(serialize(&handshake)?);
-        match conn.send_bi(msg).await {
+        let res = match conn.send_bi(msg).await {
             Ok((send_stream, _)) => {
                 send_stream.finish().await?;
                 if let Some(message) = incoming_messages.next().await {
@@ -455,7 +459,7 @@ impl ConnectionManager {
                                 Ok(HandshakeResponse::Rebootstrap(_elders)) => {
                                     trace!("HandshakeResponse::Rebootstrap, trying again");
                                     // TODO: initialise `hard_coded_contacts` with received `elders`.
-                                    return Err(Error::UnexpectedMessageOnJoin("Client should re-bootstrap with a new set of Elders, but it's not yet supported.".to_string()))
+                                    Err(Error::UnexpectedMessageOnJoin("Client should re-bootstrap with a new set of Elders, but it's not yet supported.".to_string()))
                                 }
                                 Ok(HandshakeResponse::Join(elders)) => {
                                     trace!("HandshakeResponse::Join Elders: ({:?})", elders);
@@ -465,12 +469,12 @@ impl ConnectionManager {
                                         .map(|(_, socket_addr)| socket_addr)
                                         .collect();
 
-                                    return Ok(elders_addrs)
+                                    Ok(elders_addrs)
                                 }
-                                Ok(HandshakeResponse::InvalidSection) => return Err(Error::UnexpectedMessageOnJoin(
+                                Ok(HandshakeResponse::InvalidSection) => Err(Error::UnexpectedMessageOnJoin(
                                     "bootstrapping was rejected by since it's an invalid section to join.".to_string(),
                                 )),
-                                Err(e) => return Err(e.into()),
+                                Err(e) => Err(e.into()),
                             }
                         }
                     }
@@ -482,7 +486,10 @@ impl ConnectionManager {
                 }
             }
             Err(_error) => Err(Error::ReceivingQuery),
-        }
+        };
+        // Closes connections to hcc.
+        conn.close();
+        res
     }
 
     pub fn number_of_connected_elders(&self) -> usize {
@@ -568,7 +575,7 @@ impl ConnectionManager {
             if let Ok(elder_result) = res {
                 let res = elder_result.map_err(|err| {
                     // elder connection retires already occur above
-                    warn!("Failed to connect to Elder @ : {}", err);
+                    warn!("Failed to connect to Elder @ : {:?}", err);
                 });
 
                 if let Ok((connection, incoming_messages, socket_addr)) = res {
@@ -588,8 +595,6 @@ impl ConnectionManager {
                 }
             }
 
-            // TODO: this will effectively stop driving futures after we get 2...
-            // We should still let all progress... just without blocking
             if self.elders.len() >= STANDARD_ELDERS_COUNT {
                 has_sufficent_connections = true;
             }
@@ -646,7 +651,10 @@ impl ConnectionManager {
                                             .remove(&(elder_addr, correlation_id))
                                         {
                                             trace!("Sender channel found for query response");
-                                            let _ = sender.send(Ok(response)).await;
+                                            let _ =
+                                                sender.send(Ok(response)).await.map_err(|e| {
+                                                    Error::UnexpectedMessageOnJoin(e.to_string())
+                                                })?;
                                         } else {
                                             error!("No matching pending query found for elder {:?}  and message {:?}", elder_addr, correlation_id);
                                         }

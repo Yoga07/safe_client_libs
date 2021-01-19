@@ -369,7 +369,7 @@ mod tests {
 
     #[tokio::test]
     #[cfg(feature = "simulated-payouts")]
-    pub async fn client_creation() -> Result<(), Error> {
+    pub async fn new_client_creation() -> Result<(), Error> {
         exported_tests::client_creation().await
     }
 
@@ -384,9 +384,9 @@ mod tests {
     pub async fn client_creation_with_existing_keypair() -> Result<(), Error> {
         exported_tests::client_creation_with_existing_keypair().await
     }
-    #[tokio::test]
-    #[cfg(feature = "simulated-payouts")]
-    pub async fn client_creation_and_slow_request() -> Result<(), Error> {
-        exported_tests::client_creation_and_slow_request().await
-    }
+    // #[tokio::test]
+    // #[cfg(feature = "simulated-payouts")]
+    // pub async fn client_creation_and_slow_request() -> Result<(), Error> {
+    //     exported_tests::client_creation_and_slow_request().await
+    // }
 }
